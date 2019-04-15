@@ -1,0 +1,129 @@
+#!/bin/bash
+#
+# kagami - Small and simple package manager for Ataraxia Linux
+#
+
+umask 022
+
+CMD="$1"
+ARG="$2"
+
+export LC_ALL="C"
+export VERSION="20190415"
+export DB="/var/lib/kagami"
+export PKGS="$DB/pkgs"
+export HOOKS="$DB/hooks"
+
+if [ -z "$CONF" ]; then
+	CONF="/etc/kagami.conf"
+fi
+
+source $CONF
+
+msg() {
+	local msg=$(echo $1 | tr -s / /)
+	printf "\e[1m\e[32m==>\e[0m $msg\n"
+}
+
+die() {
+	local msg=$(echo $1 | tr -s / /)
+	printf "\e[1m\e[31m==!\e[0m $msg\n"
+	rm -rf "$temp"
+	exit 1
+}
+
+installpkg() {
+	local pkg apkg bpkg cpkg dpkg root temp toremove req a myhooks UPDATE
+
+	pkg="$1"
+	root="$2"
+	temp="$(mktemp -d)" || die "kagami: couldn't create a temporary directory"
+
+	[ -f "$pkg" ] || die "kagami: file not found or not specified"
+	[ -z "${pkg##*.bepsu}" ] || die "kagami: your package extension is not supported"
+
+	apkg="$(basename $pkg)"
+	bpkg="${apkg%*.bepsu}"
+	cpkg="${bpkg%-*}"
+	dpkg="${cpkg%#*}"
+
+	msg "Installing $dpkg"
+
+	rm -rf "$root"/bepsu
+
+	if [ -d "$root"/$PKGS/$dpkg ]; then
+		UPDATE=1
+	else
+		UPDATE=0
+	fi
+
+	tar tf "$pkg" >/dev/null || die "kagami: can't extract package archive. check if archive is broken"
+
+	tar -xf "$pkg" -C "$temp"
+
+	for req in manifest filelist; do
+		if [ ! -f "$temp"/bepsu/$req ]; then
+			die "kagami: couldn't find '"$req"' file"
+		fi
+	done
+
+	if [ "$UPDATE" = "1" ]; then
+		toremove="$(cat $root/$PKGS/$dpkg/filelist | grep -xFvf - $temp/filelist)"
+		if [ $? -gt 1 ]; then
+			die "kagami: couldn't generate files to remove"
+		fi
+	fi
+
+	if [ ! -d "$root"/$PKGS/$dpkg ]; then
+		mkdir -p "$root"/$PKGS/$dpkg || die "kagami: couldn't write package in database"
+	fi
+
+	for req in manifest filelist; do
+		cp "$temp"/bepsu/$req "$root"/$PKGS/$dpkg/$req || die "kagami: failed to copy required files"
+	done
+
+	for req in pre-{install,update,remove} post-{install,update,remove}; do
+		if [ -f "$temp"/bepsu/$req ]; then
+			cp "$temp"/bepsu/$req "$root"/$PKGS/$dpkg/$req
+		fi
+	done
+
+	if [ "$UPDATE" = "1" ]; then
+		if [ -f "$root"$PKGS/$dpkg/pre-update ]; then
+			chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-update || true
+		fi
+	else
+		if [ -f "$root"$PKGS/$dpkg/pre-install ]; then
+			chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-install || true
+		fi
+	fi
+
+	tar -xf "$pkg" -C "$root"/ && rm -rf "$root"/bepsu
+
+	if [ "$UPDATE" = "1" ]; then
+		for a in $toremove; do
+			rm -rf "$root"/$a || die "kagami: couldn't remove old files"
+		done
+	fi
+
+	if [ "$UPDATE" = "1" ]; then
+		if [ -f "$root"$PKGS/$dpkg/post-update ]; then
+			chroot "$root"/ /bin/bash $PKGS/$dpkg/post-update || true
+		fi
+	else
+		if [ -f "$root"$PKGS/$dpkg/post-install ]; then
+			chroot "$root"/ /bin/bash $PKGS/$dpkg/post-install || true
+		fi
+	fi
+
+	for myhooks in $(ls "$root"$HOOKS/ | sort); do
+		chroot "$root"/ /bin/bash $HOOKS/$myhooks
+	done
+
+	rm -rf "$temp"
+}
+
+installpkg $1 $2
+
+exit 0
+
