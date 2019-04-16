@@ -32,6 +32,32 @@ die() {
 	exit 1
 }
 
+# from old apk-tools
+list_subtract() {
+	( 
+		# first we find all uniq lines
+		cat "$1" "$2" | sort | uniq -u 
+		
+		# then we combine uniq lines with first file ...
+		cat "$1"
+
+		# ...and find all duplicates. Those only exist in first file
+	) | sort | uniq -d
+}
+
+# this stuff too
+list_uninstall() {
+	local f p
+	local files=$(sort -r "$1" | sed 's:^:'"$root"': ; s:/^[^\.]\./::g; s:/\{2,\}:/:g; s:/\./:/:g')
+	if [ -z "$DRYRUN" ] ; then
+		echo "$files" | tr '\n' '\0' | xargs -0 rm 2>/dev/null
+		echo "$files" | tr '\n' '\0' | xargs -0 rmdir 2>/dev/null
+		[ "$2" ] && echo "$files" >> "$2"
+	fi
+	[ "$VERBOSE" ] && echo "$files"
+	return 0
+}
+
 installpkg() {
 	local pkg apkg bpkg cpkg dpkg root temp toremove req a myhooks UPDATE
 
@@ -47,15 +73,19 @@ installpkg() {
 	cpkg="${bpkg%-*}"
 	dpkg="${cpkg%#*}"
 
-	msg "Installing $dpkg"
-
-	rm -rf "$root"/bepsu
-
 	if [ -d "$root"/$PKGS/$dpkg ]; then
 		UPDATE=1
 	else
 		UPDATE=0
 	fi
+
+	if [ "$UPDATE" = "1" ]; then
+		msg "Upgrading $dpkg"
+	else
+		msg "Installing $dpkg"
+	fi
+
+	rm -rf "$root"/bepsu
 
 	tar tf "$pkg" >/dev/null || die "kagami: can't extract package archive. check if archive is broken"
 
@@ -68,10 +98,7 @@ installpkg() {
 	done
 
 	if [ "$UPDATE" = "1" ]; then
-		toremove="$(cat $root/$PKGS/$dpkg/filelist | grep -xFvf - $temp/filelist)"
-		if [ $? -gt 1 ]; then
-			die "kagami: couldn't generate files to remove"
-		fi
+		cp "$root"/$PKGS/$dpkg/filelist "$temp"/filelist.old
 	fi
 
 	if [ ! -d "$root"/$PKGS/$dpkg ]; then
@@ -88,37 +115,41 @@ installpkg() {
 		fi
 	done
 
-	if [ "$UPDATE" = "1" ]; then
-		if [ -f "$root"$PKGS/$dpkg/pre-update ]; then
-			chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-update || true
-		fi
-	else
-		if [ -f "$root"$PKGS/$dpkg/pre-install ]; then
-			chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-install || true
+	if [ "$RUN_SCRIPTS" = "1" ]; then
+		if [ "$UPDATE" = "1" ]; then
+			if [ -f "$root"$PKGS/$dpkg/pre-update ]; then
+				chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-update || true
+			fi
+		else
+			if [ -f "$root"$PKGS/$dpkg/pre-install ]; then
+				chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-install || true
+			fi
 		fi
 	fi
 
 	tar -xf "$pkg" -C "$root"/ && rm -rf "$root"/bepsu
 
 	if [ "$UPDATE" = "1" ]; then
-		for a in $toremove; do
-			rm -rf "$root"/$a || die "kagami: couldn't remove old files"
+		list_subtract "$temp"/filelist.old "$temp"/bepsu/filelist | list_uninstall -
+	fi
+
+	if [ "$RUN_SCRIPTS" = "1" ]; then
+		if [ "$UPDATE" = "1" ]; then
+			if [ -f "$root"$PKGS/$dpkg/post-update ]; then
+				chroot "$root"/ /bin/bash $PKGS/$dpkg/post-update || true
+			fi
+		else
+			if [ -f "$root"$PKGS/$dpkg/post-install ]; then
+				chroot "$root"/ /bin/bash $PKGS/$dpkg/post-install || true
+			fi
+		fi
+	fi
+
+	if [ "$RUN_HOOKS" = "1" ]; then
+		for myhooks in $(ls "$root"$HOOKS/ | sort); do
+			chroot "$root"/ /bin/bash $HOOKS/$myhooks
 		done
 	fi
-
-	if [ "$UPDATE" = "1" ]; then
-		if [ -f "$root"$PKGS/$dpkg/post-update ]; then
-			chroot "$root"/ /bin/bash $PKGS/$dpkg/post-update || true
-		fi
-	else
-		if [ -f "$root"$PKGS/$dpkg/post-install ]; then
-			chroot "$root"/ /bin/bash $PKGS/$dpkg/post-install || true
-		fi
-	fi
-
-	for myhooks in $(ls "$root"$HOOKS/ | sort); do
-		chroot "$root"/ /bin/bash $HOOKS/$myhooks
-	done
 
 	rm -rf "$temp"
 }
