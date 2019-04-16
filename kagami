@@ -34,10 +34,10 @@ die() {
 
 # from old apk-tools
 list_subtract() {
-	( 
+	(
 		# first we find all uniq lines
-		cat "$1" "$2" | sort | uniq -u 
-		
+		cat "$1" "$2" | sort | uniq -u
+
 		# then we combine uniq lines with first file ...
 		cat "$1"
 
@@ -59,7 +59,7 @@ list_uninstall() {
 }
 
 installpkg() {
-	local pkg apkg bpkg cpkg dpkg root temp toremove req a myhooks UPDATE
+	local pkg apkg bpkg cpkg dpkg root temp toremove req a myhooks name version release backup abackup UPDATE
 
 	pkg="$1"
 	root="$2"
@@ -97,6 +97,16 @@ installpkg() {
 		fi
 	done
 
+	source "$temp"/bepsu/manifest
+
+	if [ -n "$backup" ]; then
+		for abackup in ${backup[@]}; do
+			if [ -f "$root"/$abackup ]; then
+				mv "$root"/$abackup "$root"/$abackup.bak
+			fi
+		done
+	fi
+
 	if [ "$UPDATE" = "1" ]; then
 		cp "$root"/$PKGS/$dpkg/filelist "$temp"/filelist.old
 	fi
@@ -131,6 +141,15 @@ installpkg() {
 
 	if [ "$UPDATE" = "1" ]; then
 		list_subtract "$temp"/filelist.old "$temp"/bepsu/filelist | list_uninstall -
+	fi
+
+	if [ -n "$backup" ]; then
+		for abackup in ${backup[@]}; do
+			if [ -f "$root"/$abackup ]; then
+				rm -rf "$root"/$abackup
+				mv "$root"/$abackup.bak "$root"/$abackup
+			fi
+		done
 	fi
 
 	if [ "$RUN_SCRIPTS" = "1" ]; then
