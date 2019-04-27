@@ -3,6 +3,8 @@
 # kagami - Small and simple package manager for Ataraxia Linux
 #
 
+set -x
+
 umask 022
 
 CMD="$1"
@@ -54,11 +56,10 @@ list_uninstall() {
 		echo "$files" | tr '\n' '\0' | xargs -0 rmdir 2>/dev/null
 		[ "$2" ] && echo "$files" >> "$2"
 	fi
-	[ "$VERBOSE" ] && echo "$files"
 	return 0
 }
 
-installpkg() {
+pkgadd() {
 	local pkg apkg bpkg cpkg dpkg root temp toremove req a myhooks name version release backup abackup UPDATE
 
 	pkg="$1"
@@ -99,12 +100,14 @@ installpkg() {
 
 	source "$temp"/bepsu/manifest
 
-	if [ -n "$backup" ]; then
-		for abackup in ${backup[@]}; do
-			if [ -f "$root"/$abackup ]; then
-				mv "$root"/$abackup "$root"/$abackup.bak
-			fi
-		done
+	if [ "$NO_BACKUP" != "1" ]; then
+		if [ -n "$backup" ]; then
+			for abackup in ${backup[@]}; do
+				if [ -f "$root"/$abackup ]; then
+					mv "$root"/$abackup "$root"/$abackup.bak
+				fi
+			done
+		fi
 	fi
 
 	if [ "$UPDATE" = "1" ]; then
@@ -143,13 +146,15 @@ installpkg() {
 		list_subtract "$temp"/filelist.old "$temp"/bepsu/filelist | list_uninstall -
 	fi
 
-	if [ -n "$backup" ]; then
-		for abackup in ${backup[@]}; do
-			if [ -f "$root"/$abackup ]; then
-				rm -rf "$root"/$abackup
-				mv "$root"/$abackup.bak "$root"/$abackup
-			fi
-		done
+	if [ "$NO_BACKUP" != "1" ]; then
+		if [ -n "$backup" ]; then
+			for abackup in ${backup[@]}; do
+				if [ -f "$root"/$abackup ]; then
+					rm -rf "$root"/$abackup
+					mv "$root"/$abackup.bak "$root"/$abackup
+				fi
+			done
+		fi
 	fi
 
 	if [ "$RUN_SCRIPTS" = "1" ]; then
@@ -173,7 +178,68 @@ installpkg() {
 	rm -rf "$temp"
 }
 
-installpkg $1 $2
+pkgrm() {
+	local dpkg root myhooks name version release backup abackup nondir dirlist
+
+	dpkg="$1"
+	root="$2"
+
+	#[ -z "$dpkg" ] || die "kagami: package name not specified"
+
+	if [ ! -d "$root"/$PKGS/$dpkg ]; then
+		die "kagami: package not installed"
+	fi
+
+	msg "Removing $dpkg"
+	source "$root"/$PKGS/$dpkg/manifest
+
+	if [ "$NO_BACKUP" != "1" ]; then
+		if [ -n "$backup" ]; then
+			for abackup in ${backup[@]}; do
+				if [ -f "$root"/$abackup ]; then
+					mv "$root"/$abackup "$root"/$abackup.bak
+				fi
+			done
+		fi
+	fi
+
+	if [ "$RUN_SCRIPTS" = "1" ]; then
+		if [ -f "$root"$PKGS/$dpkg/pre-remove ]; then
+			chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-install || true
+		fi
+	fi
+
+	dirlist=`grep '/$' "$root"/$PKGS/$dpkg/filelist`
+	nondir=`grep -v '/$' "$root"/$PKGS/$dpkg/filelist`
+	list_uninstall "$root"/$PKGS/$dpkg/filelist
+	rm -rf "$root"/$PKGS/$dpkg
+
+	[ -e /usr/bin/sh ] || ln -sf /usr/bin/busybox /usr/bin/sh
+
+	if [ "$NO_BACKUP" != "1" ]; then
+		if [ -n "$backup" ]; then
+			for abackup in ${backup[@]}; do
+				if [ -f "$root"/$abackup ]; then
+					mv "$root"/$abackup.bak "$root"/$abackup
+				fi
+			done
+		fi
+	fi
+
+	if [ "$RUN_SCRIPTS" = "1" ]; then
+		if [ -f "$root"$PKGS/$dpkg/post-remove ]; then
+			chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-install || true
+		fi
+	fi
+
+	if [ "$RUN_HOOKS" = "1" ]; then
+		for myhooks in $(ls "$root"$HOOKS/ | sort); do
+			chroot "$root"/ /bin/bash $HOOKS/$myhooks
+		done
+	fi
+}
+
+pkgrm $1 $2
 
 exit 0
 
