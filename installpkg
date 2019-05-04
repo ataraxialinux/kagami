@@ -118,7 +118,7 @@ else
 				NO_BACKUP=1
 				;;
 			--no-scripts-ns)
-				RUN_SCRIPTS=9
+				RUN_SCRIPTS=0
 				;;
 			--no-hooks|-nh)
 				RUN_HOOKS=0
@@ -134,8 +134,8 @@ else
 	done
 fi
 
-pkg="$1"
-root="$2"
+pkg="$MYPKG"
+root="$ROOT"
 temp="$(mktemp -d)" || die "kagami: couldn't create a temporary directory"
 
 [ -f "$pkg" ] || die "kagami: file not found or not specified"
@@ -213,6 +213,8 @@ if [ "$UPDATE" = "1" ]; then
 else
 	run_script post-install
 fi
+
+run_hooks
 
 rm -rf "$temp"
 
