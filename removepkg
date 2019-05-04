@@ -144,8 +144,6 @@ fi
 dpkg="$MYPKG"
 root="$ROOT"
 
-[ -z "$dpkg" ] || die "removepkg: package name not specified"
-
 if [ ! -d "$root"/$PKGS/$dpkg ]; then
 	die "removepkg: package not installed"
 fi

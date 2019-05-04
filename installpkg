@@ -164,8 +164,7 @@ pkg="$MYPKG"
 root="$ROOT"
 temp="$(mktemp -d)" || die "installpkg: couldn't create a temporary directory"
 
-[ -f "$pkg" ] || die "installpkg: file not found or not specified"
-[ -z "${pkg##*.bhv.$BARCH.tar.zst}" ] || die "installpkg: your package extension is not supported"
+[ -f "$MYPKG" ] || die "installpkg: file not found or not specified"
 
 apkg="$(basename $pkg)"
 bpkg="${apkg%*.bhv.$BARCH.tar.zst}"
