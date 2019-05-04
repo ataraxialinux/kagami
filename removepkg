@@ -9,15 +9,31 @@ umask 022
 unset dpkg root myhooks name version release backup abackup nondir dirlis
 
 LC_ALL="C"
-VERSION="20190415"
+VERSION="0.1"
 DB="/var/lib/kagami"
 PKGS="$DB/pkgs"
 HOOKS="$DB/hooks"
-UPDATE=0
 NO_BACKUP=0
 RUN_SCRIPTS=1
 RUN_HOOKS=1
 ROOT='/'
+
+runhelp() {
+cat <<EOF
+
+removepkg - Small utiltity to remove packages
+
+Usage:	removepkg [options] <package_name>
+
+	-h,  --help			Show help
+	-nb, --no-backup                Don't backup old files
+	-ns, --no-script		Don't run scripts
+	-nh, --no-hooks			Don't run hooks
+	--root=<path>			Alternative path for installing packages
+
+EOF
+exit 0
+}
 
 msg() {
 	local msg=$(echo $1 | tr -s / /)
@@ -37,7 +53,7 @@ die() {
 
 check_for_root() {
 	if [[ $EUID -ne 0 ]]; then
-	die "kagami: package manager should be run as root"
+	die "removepkg: package manager should be run as root"
 	fi
 }
 
@@ -98,10 +114,13 @@ restore_files() {
 check_for_root
 
 if [ -z "$1" ]; then
-	die "kagami: specify arguments. Consider to run 'removepkg --help'"
+	die "removepkg: specify arguments. Consider to run 'removepkg --help'"
 else
 	while [ "$1" ]; do
 		case $1 in
+			--help|-h)
+				runhelp
+				;;
 			--no-backup|-nb)
 				NO_BACKUP=1
 				;;
@@ -125,10 +144,10 @@ fi
 dpkg="$MYPKG"
 root="$ROOT"
 
-[ -z "$dpkg" ] || die "kagami: package name not specified"
+[ -z "$dpkg" ] || die "removepkg: package name not specified"
 
 if [ ! -d "$root"/$PKGS/$dpkg ]; then
-	die "kagami: package not installed"
+	die "removepkg: package not installed"
 fi
 
 msg "Removing $dpkg"

@@ -6,18 +6,38 @@
 umask 022
 
 # cleanup
-unset pkg apkg bpkg cpkg dpkg root temp toremove req a myhooks name version release backup abackup UPDATE NO_BACKUP RUN_SCRIPTS RUN_HOOKS ROOT
+unset pkg apkg bpkg cpkg dpkg root temp toremove req a myhooks name version release backup abackup UPDATE REINSTALL NO_BACKUP RUN_SCRIPTS RUN_HOOKS ROOT oldversion oldversion
 
 LC_ALL="C"
-VERSION="20190415"
+VERSION="0.1"
 DB="/var/lib/kagami"
 PKGS="$DB/pkgs"
 HOOKS="$DB/hooks"
 UPDATE=0
+REINSTALL=0
 NO_BACKUP=0
 RUN_SCRIPTS=1
 RUN_HOOKS=1
 ROOT='/'
+
+runhelp() {
+cat <<EOF
+
+installpkg - Small utiltity to install and update packages
+
+Usage:	installpkg [options] <package_name>
+
+	-h,  --help			Show help
+	-u,  --upgrade			Upgrade installed package
+	-ri, --reinstall		Reinstall installed package
+	-nb, --no-backup                Don't backup old files
+	-ns, --no-script		Don't run scripts
+	-nh, --no-hooks			Don't run hooks
+	--root=<path>			Alternative path for installing packages
+
+EOF
+exit 0
+}
 
 msg() {
 	local msg=$(echo $1 | tr -s / /)
@@ -30,7 +50,7 @@ die() {
 
 	# remove garbage
 	rm -rf "$temp"
-	unset pkg apkg bpkg cpkg dpkg root temp toremove req a myhooks name version release backup abackup UPDATE NO_BACKUP RUN_SCRIPTS RUN_HOOKS ROOT
+	unset pkg apkg bpkg cpkg dpkg root temp toremove req a myhooks name version release backup abackup UPDATE REINSTALL NO_BACKUP RUN_SCRIPTS RUN_HOOKS ROOT oldversion oldversion
 
 	# bye
 	exit 1
@@ -38,7 +58,7 @@ die() {
 
 check_for_root() {
 	if [[ $EUID -ne 0 ]]; then
-	die "kagami: package manager should be run as root"
+	die "installpkg: package manager should be run as root"
 	fi
 }
 
@@ -107,11 +127,17 @@ restore_files() {
 check_for_root
 
 if [ -z "$1" ]; then
-	die "kagami: specify arguments. Consider to run 'installpkg --help'"
+	die "installpkg: specify arguments. Consider to run 'installpkg --help'"
 else
 	while [ "$1" ]; do
 		case $1 in
-			--update|-u|--reinstall|-ri)
+			--help|-h)
+				runhelp
+				;;
+			--reinstall|-ri)
+				REINSTALL=1
+				;;
+			--upgrade|-u)
 				UPDATE=1
 				;;
 			--no-backup|-nb)
@@ -136,10 +162,10 @@ fi
 
 pkg="$MYPKG"
 root="$ROOT"
-temp="$(mktemp -d)" || die "kagami: couldn't create a temporary directory"
+temp="$(mktemp -d)" || die "installpkg: couldn't create a temporary directory"
 
-[ -f "$pkg" ] || die "kagami: file not found or not specified"
-[ -z "${pkg##*.bhv.$BARCH.tar.zst}" ] || die "kagami: your package extension is not supported"
+[ -f "$pkg" ] || die "installpkg: file not found or not specified"
+[ -z "${pkg##*.bhv.$BARCH.tar.zst}" ] || die "installpkg: your package extension is not supported"
 
 apkg="$(basename $pkg)"
 bpkg="${apkg%*.bhv.$BARCH.tar.zst}"
@@ -162,17 +188,37 @@ fi
 
 rm -rf "$root"/bepsu
 
-bsdtar tf "$pkg" >/dev/null || die "kagami: can't extract package archive. check if archive is broken"
+bsdtar tf "$pkg" >/dev/null || die "installpkg: can't extract package archive. check if archive is broken"
 
 bsdtar -xf "$pkg" -C "$temp"
 
 for req in manifest filelist; do
 	if [ ! -f "$temp"/bepsu/$req ]; then
-		die "kagami: couldn't find '"$req"' file"
+		die "installpkg: couldn't find '"$req"' file"
 	fi
 done
 
 source "$temp"/bepsu/manifest
+
+if [ "$REINSTALL" = "1" ]; then
+	if [ ! -d "$root"/$PKGS/$dpkg ]; then
+		die "installpkg: package is not installed"
+	fi
+fi
+
+if [ "$REINSTALL" != "1" ]; then
+	if [ "$UPDATE" = "1" ]; then
+		oldversion="$(cat "$root"/$PKGS/$dpkg/manifest | grep ^version | sed -e 's,version=,,g' )"
+		oldrelease="$(cat "$root"/$PKGS/$dpkg/manifest | grep ^release | sed -e 's,release=,,g' )"
+		if [ "$version" = "$oldversion"  ]; then
+			if [ "$release" = "$oldrelese"  ]; then
+				die "installpkg: your package doesn't need to be updated"
+			fi
+		else
+			die "installpkg: your package doesn't need to be updated"
+		fi
+	fi
+fi
 
 backup
 
@@ -181,11 +227,11 @@ if [ "$UPDATE" = "1" ]; then
 fi
 
 if [ ! -d "$root"/$PKGS/$dpkg ]; then
-	mkdir -p "$root"/$PKGS/$dpkg || die "kagami: couldn't write package in database"
+	mkdir -p "$root"/$PKGS/$dpkg || die "installpkg: couldn't write package in database"
 fi
 
 for req in manifest filelist; do
-	cp "$temp"/bepsu/$req "$root"/$PKGS/$dpkg/$req || die "kagami: failed to copy required files"
+	cp "$temp"/bepsu/$req "$root"/$PKGS/$dpkg/$req || die "installpkg: failed to copy required files"
 done
 
 for req in pre-{install,update,remove} post-{install,update,remove}; do
