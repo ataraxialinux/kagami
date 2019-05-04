@@ -85,7 +85,7 @@ list_uninstall() {
 run_hooks() {
 	if [ "$RUN_HOOKS" = "1" ]; then
 		for myhooks in $(ls "$root"$HOOKS/ | sort); do
-			chroot "$root"/ /bin/bash $HOOKS/$myhooks
+			/usr/bin/bash $HOOKS/$myhooks || true
 		done
 	fi
 }
