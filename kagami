@@ -1,9 +1,7 @@
 #!/bin/bash
 #
-# kagami - Small and simple package manager for Ataraxia Linux
+# kagami - Small and simple package manager for Absdtaraxia Linux
 #
-
-set -x
 
 umask 022
 
@@ -16,12 +14,6 @@ export DB="/var/lib/kagami"
 export PKGS="$DB/pkgs"
 export HOOKS="$DB/hooks"
 
-if [ -z "$CONF" ]; then
-	CONF="/etc/kagami.conf"
-fi
-
-source $CONF
-
 msg() {
 	local msg=$(echo $1 | tr -s / /)
 	printf "\e[1m\e[32m==>\e[0m $msg\n"
@@ -32,6 +24,22 @@ die() {
 	printf "\e[1m\e[31m==!\e[0m $msg\n"
 	rm -rf "$temp"
 	exit 1
+}
+
+if [ -z "$CONF" ]; then
+	CONF="/etc/kagami.conf"
+fi
+
+if [ ! -f "$CONF" ]; then
+	die "kagami: configuration file not found!"
+fi
+
+source $CONF
+
+check_for_root() {
+	if [[ $EUID -ne 0 ]]; then
+		die "kagami: package manager should be run as root"
+	fi
 }
 
 # from old apk-tools
@@ -59,25 +67,71 @@ list_uninstall() {
 	return 0
 }
 
+run_hooks() {
+	if [ "$RUN_HOOKS" = "1" ]; then
+		for myhooks in $(ls "$root"$HOOKS/ | sort); do
+			chroot "$root"/ /bin/bash $HOOKS/$myhooks
+		done
+	fi
+}
+
+run_script() {
+	local script="$1"
+
+	if [ "$RUN_SCRIPTS" = "1" ]; then
+		if [ -f $PKGS/$dpkg/$script ]; then
+			/usr/bin/bash $PKGS/$dpkg/$script || true
+		fi
+	fi
+}
+
+backup() {
+	if [ "$NO_BACKUP" != "1" ]; then
+		if [ -n "$backup" ]; then
+			for abackup in ${backup[@]}; do
+				if [ -f "$root"/$abackup ]; then
+					mv "$root"/$abackup "$root"/$abackup.bak
+				fi
+			done
+		fi
+	fi
+}
+
+restore_files() {
+	if [ "$NO_BACKUP" != "1" ]; then
+		if [ -n "$backup" ]; then
+			for abackup in ${backup[@]}; do
+				if [ -f "$root"/$abackup ]; then
+					mv "$root"/$abackup.bak "$root"/$abackup
+				fi
+			done
+		fi
+	fi
+}
+
 pkgadd() {
-	local pkg apkg bpkg cpkg dpkg root temp toremove req a myhooks name version release backup abackup UPDATE
+	[ -z "$BARCH" ] || die "kagami: failed to detect cpu architecture"
+
+	local pkg apkg bpkg cpkg dpkg root temp toremove req a myhooks name version release backup abackup
 
 	pkg="$1"
 	root="$2"
 	temp="$(mktemp -d)" || die "kagami: couldn't create a temporary directory"
 
 	[ -f "$pkg" ] || die "kagami: file not found or not specified"
-	[ -z "${pkg##*.bepsu}" ] || die "kagami: your package extension is not supported"
+	[ -z "${pkg##*.bhv.$BARCH.tar.zst}" ] || die "kagami: your package extension is not supported"
 
 	apkg="$(basename $pkg)"
-	bpkg="${apkg%*.bepsu}"
+	bpkg="${apkg%*.bhv.$BARCH.tar.zst}"
 	cpkg="${bpkg%-*}"
 	dpkg="${cpkg%#*}"
 
-	if [ -d "$root"/$PKGS/$dpkg ]; then
-		UPDATE=1
-	else
-		UPDATE=0
+	if [ -z "$UPDATE" ]; then
+		if [ -d "$root"/$PKGS/$dpkg ]; then
+			UPDATE=1
+		else
+			UPDATE=0
+		fi
 	fi
 
 	if [ "$UPDATE" = "1" ]; then
@@ -88,9 +142,9 @@ pkgadd() {
 
 	rm -rf "$root"/bepsu
 
-	tar tf "$pkg" >/dev/null || die "kagami: can't extract package archive. check if archive is broken"
+	bsdtar tf "$pkg" >/dev/null || die "kagami: can't extract package archive. check if archive is broken"
 
-	tar -xf "$pkg" -C "$temp"
+	bsdtar -xf "$pkg" -C "$temp"
 
 	for req in manifest filelist; do
 		if [ ! -f "$temp"/bepsu/$req ]; then
@@ -100,15 +154,7 @@ pkgadd() {
 
 	source "$temp"/bepsu/manifest
 
-	if [ "$NO_BACKUP" != "1" ]; then
-		if [ -n "$backup" ]; then
-			for abackup in ${backup[@]}; do
-				if [ -f "$root"/$abackup ]; then
-					mv "$root"/$abackup "$root"/$abackup.bak
-				fi
-			done
-		fi
-	fi
+	backup
 
 	if [ "$UPDATE" = "1" ]; then
 		cp "$root"/$PKGS/$dpkg/filelist "$temp"/filelist.old
@@ -128,51 +174,24 @@ pkgadd() {
 		fi
 	done
 
-	if [ "$RUN_SCRIPTS" = "1" ]; then
-		if [ "$UPDATE" = "1" ]; then
-			if [ -f "$root"$PKGS/$dpkg/pre-update ]; then
-				chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-update || true
-			fi
-		else
-			if [ -f "$root"$PKGS/$dpkg/pre-install ]; then
-				chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-install || true
-			fi
-		fi
+	if [ "$UPDATE" = "1" ]; then
+		run_script pre-update
+	else
+		run_script pre-install
 	fi
 
-	tar -xf "$pkg" -C "$root"/ && rm -rf "$root"/bepsu
+	bsdtar -xf "$pkg" -C "$root"/ && rm -rf "$root"/bepsu
 
 	if [ "$UPDATE" = "1" ]; then
 		list_subtract "$temp"/filelist.old "$temp"/bepsu/filelist | list_uninstall -
 	fi
 
-	if [ "$NO_BACKUP" != "1" ]; then
-		if [ -n "$backup" ]; then
-			for abackup in ${backup[@]}; do
-				if [ -f "$root"/$abackup ]; then
-					rm -rf "$root"/$abackup
-					mv "$root"/$abackup.bak "$root"/$abackup
-				fi
-			done
-		fi
-	fi
+	restore_files
 
-	if [ "$RUN_SCRIPTS" = "1" ]; then
-		if [ "$UPDATE" = "1" ]; then
-			if [ -f "$root"$PKGS/$dpkg/post-update ]; then
-				chroot "$root"/ /bin/bash $PKGS/$dpkg/post-update || true
-			fi
-		else
-			if [ -f "$root"$PKGS/$dpkg/post-install ]; then
-				chroot "$root"/ /bin/bash $PKGS/$dpkg/post-install || true
-			fi
-		fi
-	fi
-
-	if [ "$RUN_HOOKS" = "1" ]; then
-		for myhooks in $(ls "$root"$HOOKS/ | sort); do
-			chroot "$root"/ /bin/bash $HOOKS/$myhooks
-		done
+	if [ "$UPDATE" = "1" ]; then
+		run_script post-update
+	else
+		run_script post-install
 	fi
 
 	rm -rf "$temp"
@@ -184,7 +203,7 @@ pkgrm() {
 	dpkg="$1"
 	root="$2"
 
-	#[ -z "$dpkg" ] || die "kagami: package name not specified"
+	[ -z "$dpkg" ] || die "kagami: package name not specified"
 
 	if [ ! -d "$root"/$PKGS/$dpkg ]; then
 		die "kagami: package not installed"
@@ -193,53 +212,63 @@ pkgrm() {
 	msg "Removing $dpkg"
 	source "$root"/$PKGS/$dpkg/manifest
 
-	if [ "$NO_BACKUP" != "1" ]; then
-		if [ -n "$backup" ]; then
-			for abackup in ${backup[@]}; do
-				if [ -f "$root"/$abackup ]; then
-					mv "$root"/$abackup "$root"/$abackup.bak
-				fi
-			done
-		fi
-	fi
+	backup
 
-	if [ "$RUN_SCRIPTS" = "1" ]; then
-		if [ -f "$root"$PKGS/$dpkg/pre-remove ]; then
-			chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-install || true
-		fi
-	fi
+	run_script pre-remove
 
 	dirlist=`grep '/$' "$root"/$PKGS/$dpkg/filelist`
 	nondir=`grep -v '/$' "$root"/$PKGS/$dpkg/filelist`
 	list_uninstall "$root"/$PKGS/$dpkg/filelist
 	rm -rf "$root"/$PKGS/$dpkg
 
-	[ -e /usr/bin/sh ] || ln -sf /usr/bin/busybox /usr/bin/sh
+	restore_files
 
-	if [ "$NO_BACKUP" != "1" ]; then
-		if [ -n "$backup" ]; then
-			for abackup in ${backup[@]}; do
-				if [ -f "$root"/$abackup ]; then
-					mv "$root"/$abackup.bak "$root"/$abackup
-				fi
-			done
-		fi
-	fi
-
-	if [ "$RUN_SCRIPTS" = "1" ]; then
-		if [ -f "$root"$PKGS/$dpkg/post-remove ]; then
-			chroot "$root"/ /bin/bash $PKGS/$dpkg/pre-install || true
-		fi
-	fi
-
-	if [ "$RUN_HOOKS" = "1" ]; then
-		for myhooks in $(ls "$root"$HOOKS/ | sort); do
-			chroot "$root"/ /bin/bash $HOOKS/$myhooks
-		done
-	fi
+	run_script post-remove
 }
 
-pkgrm $1 $2
+case $CMD in
+	--install|-i)
+		check_for_root
+		if [ -z "$ARG" ]; then
+			die "kagami: specify arguments"
+		else
+			while [ "$1" ]; do
+				UPDATE=0
+				NO_BACKUP=0
+				RUN_SCRIPTS=1
+				RUN_HOOKS=1
+				ROOT='/'
+				case $ARG in
+					--update|-u|--reinstall|-ri)
+						UPDATE=1
+						;;
+					--no-backup|-nb)
+						NO_BACKUP=1
+						;;
+					--no-scripts-ns)
+						RUN_SCRIPTS=9
+						;;
+					--no-hooks|-nh)
+						RUN_HOOKS=0
+						;;
+					--root=*)
+						ROOT="${ARG#*=}"
+						;;
+					*.bhv.*.tar.zst)
+						MYPKG="$ARG"
+						;;
+					*)
+						die "kagami: invalid option! Consider to run 'kagami --help'"
+						;;
+				esac
+				shift
+			done
+			pkgadd "$MYPKG" "$ROOT"
+		fi
+		;;
+	*)
+		die "kagami: invalid option! Consider to run 'kagami --help'"
+esac
 
 exit 0
 
