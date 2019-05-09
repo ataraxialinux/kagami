@@ -1,0 +1,18 @@
+#!/bin/bash
+# dummy file by TheOrangeCat
+# your /etc/enviromment or /etc/profile should have kagami dir in path variable
+case "$1" in
+installpkg)
+installpkg $2
+;;
+removepkg)
+removepkg $2
+;;
+craftpkg)
+craftpkg $2
+;;
+*)
+echo "Usage: kagami {installpkg|removepkg|craftpkg} package"
+exit 1
+;;
+esac
