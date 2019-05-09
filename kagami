@@ -12,7 +12,7 @@ craftpkg)
 craftpkg $2 $3 $4 $5 $6
 ;;
 *)
-echo "Usage: kagami {installpkg|removepkg|craftpkg} [options]"
+echo "Usage: kagami {installpkg|removepkg|craftpkg} options"
 exit 1
 ;;
 esac
