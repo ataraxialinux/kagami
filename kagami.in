@@ -357,7 +357,7 @@ build_package() {
 }
 
 export LC_ALL=POSIX
-export VERSION="20190622"
+export VERSION="@VERSION@"
 export TOPDIR="$PWD"
 
 CONFIG="/etc/kagami.conf"
