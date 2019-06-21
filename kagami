@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# THE SHITIEST PACKAGE MANAGER EVER CREATED
+# Small and simple packages manager for Ataraxia Linux
 #
 
 umask 022
