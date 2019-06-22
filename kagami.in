@@ -17,12 +17,25 @@ die() {
 	echo -e "\033[1;31m >>> \033[0m$@"
 
 	if [ "$kagami_mode" = "build_package" ]; then
-		unset name version release source backup options
+		unset name version release source backup options depends conflicts
 		unset -f build
 
 		if [ "$NOCLEAN" != "yes" ]; then
 			rm -rf "$WORK"
 		fi
+	elif [ "$kagami_mode" = "install_package" ]; then
+		rm -rf "$TMPDIR"
+		unset NAME VERSION RELEASE
+	elif [ "$kagami_mode" = "emerge_package" ]; then
+		unset name version release source backup options depends conflicts
+		unset -f build
+
+		if [ "$NOCLEAN" != "yes" ]; then
+			rm -rf "$WORK"
+		fi
+
+		rm -rf "$TMPDIR"
+		unset NAME VERSION RELEASE
 	fi
 
 	exit 1
@@ -32,12 +45,25 @@ dietwo() {
 	echo -e "\033[1;31m * \033[0m$@"
 
 	if [ "$kagami_mode" = "build_package" ]; then
-		unset name version release source backup options
+		unset name version release source backup options depends conflicts
 		unset -f build
 
 		if [ "$NOCLEAN" != "yes" ]; then
 			rm -rf "$WORK"
 		fi
+	elif [ "$kagami_mode" = "install_package" ]; then
+		rm -rf "$TMPDIR"
+		unset NAME VERSION RELEASE
+	elif [ "$kagami_mode" = "emerge_package" ]; then
+		unset name version release source backup options depends conflicts
+		unset -f build
+
+		if [ "$NOCLEAN" != "yes" ]; then
+			rm -rf "$WORK"
+		fi
+
+		rm -rf "$TMPDIR"
+		unset NAME VERSION RELEASE
 	fi
 
 	exit 1
@@ -59,14 +85,16 @@ source_config() {
 
 source_recipe() {
 	if [ -f "$TOPDIR/KagamiBuild" ]; then
-		source "$TOPDIR/KagamiBuild"
+		MYPORT="$TOPDIR/KagamiBuild"
 	elif [ -f "$TOPDIR/KBUILD" ]; then
-		source "$TOPDIR/KBUILD"
+		MYPORT="$TOPDIR/KBUILD"
 	elif [ -f "$TOPDIR/Pkgfile" ]; then
-		source "$TOPDIR/Pkgfile"
+		MYPORT="$TOPDIR/Pkgfile"
 	else
 		die "Failed to source the package recipe"
 	fi
+
+	source "$MYPORT"
 
 	if [ -z "$name" ]; then
 		dietwo "The name of package is not set"
@@ -75,6 +103,9 @@ source_recipe() {
 	elif [ -z "$release" ]; then
 		dietwo "The release of package is not set"
 	fi
+
+	depends=$(grep "^# Depends on[[:blank:]]*:" "$MYPORT" | sed 's/^# Depends on[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')
+	conflicts=$(grep "^# Conflicts with[[:blank:]]*:" "$MYPORT" | sed 's/^# Conflicts with[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')
 }
 
 get_filename() {
@@ -322,7 +353,7 @@ create_package() {
 }
 
 build_package() {
-	unset name version release source backup options
+	unset name version release source backup options depends conflicts
 	unset -f build
 
 	source_recipe
@@ -356,18 +387,188 @@ build_package() {
 	fi
 }
 
+# from old apk-tools
+list_subtract() {
+	(
+		cat "$1" "$2" | sort | uniq -u
+		cat "$1"
+	) | sort | uniq -d
+}
+
+# this stuff too
+list_uninstall() {
+	local SAVEROOTDIR="${ROOTDIR}/"
+	local f p
+	local files=$(sort -r "$1" | sed 's:^:'"${SAVEROOTDIR}"': ; s:/^[^\.]\./::g; s:/\{2,\}:/:g; s:/\./:/:g')
+	if [ -z "$DRYRUN" ] ; then
+		echo "$files" | tr '\n' '\0' | xargs -0 rm 2>/dev/null
+		echo "$files" | tr '\n' '\0' | xargs -0 rmdir 2>/dev/null
+		[ "$2" ] && echo "$files" >> "$2"
+	fi
+	return 0
+}
+
+backup_save() {
+	if [ "$HAS_BACKUP" = "1" ]; then
+		if [ "$NOBACKUP" != "yes" ]; then
+			if [ -f "$TMPDIR/data/BACKUP" ]; then
+				msgtwo "Saving required files"
+				local mybackup
+				for mybackup in $(cat "$TMPDIR/data/BACKUP"); do
+					if [ -f "$ROOTDIR/$mybackup" ]; then
+						mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.bak" || dietwo "Failed to save $mybackup"
+					fi
+				done
+			fi
+		fi
+	fi
+}
+
+backup_restore() {
+	if [ "$HAS_BACKUP" = "1" ]; then
+		if [ "$NOBACKUP" != "yes" ]; then
+			if [ -f "$TMPDIR/data/BACKUP" ]; then
+				msgtwo "Restoring required files"
+				local mybackup
+				for mybackup in $(cat "$TMPDIR/data/BACKUP"); do
+					if [ -f "$ROOTDIR/$mybackup.bak" ]; then
+						mv "$ROOTDIR/$mybackup.bak" "$ROOTDIR/$mybackup" || dietwo "Failed to restore $mybackup"
+					fi
+				done
+			fi
+		fi
+	fi
+}
+
+run_scripts() {
+	local myopt=$1
+
+	if [ "$HAS_INSTALL" = "1" ]; then
+		if [ "$NOSCRIPTS" != "yes" ]; then
+			if [ -x "$ROOTDIR/$SCIPTS/$dpkg" ]; then
+				msgtwo "Running $myopt scripts"
+				chroot "$ROOTDIR" $SCIPTS/$dpkg $myopt
+			fi
+		fi
+	fi
+}
+
+install_package() {
+	local pkg apkg bpkg cpkg dpkg TMPDIR UPDATE HAS_FILES HAS_BACKUP HAS_INSTALL RUN_SUBSTRACT
+	pkg="$1"
+
+	unset NAME VERSION RELEASE
+
+	if [ ! -f "$pkg" ]; then
+		die "Your package file is not found or not specified"
+	fi
+
+	TMPDIR="$(mktemp -d)" || die "Couldn't create a temporary directory"
+
+	apkg="$(basename $pkg)"
+	bpkg="${apkg%*.kagami}"
+	cpkg="${bpkg%+*}"
+	dpkg="${cpkg%#*}"
+
+	if [ -d "$ROOTDIR/$PACKAGES/$dpkg" ]; then
+		if [ "$NEEDED" != "yes" ]; then
+			UPDATE=1
+		else
+			warnt "This package has been already installed"
+			exit 0
+		fi
+	else
+		UPDATE=0
+	fi
+
+	if [ "$UPDATE" = "1" ]; then
+		msg "Upgrading package: '${dpkg}'"
+	else
+		msg "Installing package: '${dpkg}'"
+	fi
+
+	msgtwo "Checking package file"
+	bsdtar -C "$TMPDIR" -xf "$pkg" data/METADATA 2>/dev/null || die "Can't extract package archive. Check if archive is broken"
+
+	bsdtar -C "$TMPDIR" -xf "$pkg" data/CONTENTS 2>/dev/null
+	if [ $? -eq 0 ]; then
+		HAS_FILES=1
+	fi
+
+	bsdtar -C "$TMPDIR" -xf "$pkg" data/BACKUP 2>/dev/null
+	if [ $? -eq 0 ]; then
+		HAS_BACKUP=1
+	fi
+
+	bsdtar -C "$TMPDIR" -xf "$pkg" data/INSTALL 2>/dev/null
+	if [ $? -eq 0 ]; then
+		HAS_INSTALL=1
+	fi
+
+	mkdir -p "$ROOTDIR/$PACKAGES/$dpkg" "$ROOTDIR/$SCRIPTS"
+	cp "$TMPDIR/data/METADATA" "$ROOTDIR/$PACKAGES/$dpkg/METADATA"
+
+	if [ "$HAS_FILES" = "1" ]; then
+		if [ "$UPDATE" = "1" ]; then
+			if [ -f "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS" ]; then
+				mv "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS" "$TMPDIR/data/CONTENTS.old"
+				cp "$TMPDIR/data/CONTENTS" "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS"
+				RUN_SUBSTRACT=1
+			else
+				cp "$TMPDIR/data/CONTENTS" "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS"
+			fi
+		else
+			cp "$TMPDIR/data/CONTENTS" "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS"
+		fi
+	fi
+
+	if [ "$HAS_INSTALL" = "1" ]; then
+		cp "$TMPDIR/data/INSTALL" "$ROOTDIR/$SCRIPTS/$dpkg"
+	fi
+
+	if [ "$UPDATE" = "1" ]; then
+		run_scripts pre-update
+	else
+		run_scripts pre-install
+	fi
+
+	backup_save
+
+	msgtwo "Installing package contents"
+	bsdtar -xf "$pkg" -C "$ROOTDIR"  2>/dev/null || dietwo "Failed to install package contents"
+	rm -rf "$ROOTDIR/data"
+
+	if [ "$RUN_SUBSTRACT" = "1" ]; then
+		list_subtract "$TMPDIR/data/CONTENTS.old" "$TMPDIR/data/CONTENTS" | list_uninstall -
+	fi
+
+	backup_restore
+
+	if [ "$UPDATE" = "1" ]; then
+		run_scripts post-update
+	else
+		run_scripts post-install
+	fi
+
+	rm -rf "$TMPDIR"
+	msg "Package was successfully installed"
+}
+
 export LC_ALL=POSIX
 export VERSION="@VERSION@"
 export TOPDIR="$PWD"
 
 CONFIG="/etc/kagami.conf"
-ROOTDIR="/"
+ROOTDIR=''
 WORK="$TOPDIR/work"
 PKG="$WORK/pkg"
 SRC="$WORK/src"
 PKGDEST="$TOPDIR"
 SRCDEST="$TOPDIR"
 OPTIONS=('emptydirs' 'strip' 'makeflags' 'locales' 'docs')
+DATABASE="/var/lib/kagami"
+PACKAGES="$DATABASE/pkgs"
+SCRIPTS="$DATABASE/scripts"
 NOOPTIONS="no"
 NOCLEAN="no"
 NODOWNLOAD="no"
@@ -464,8 +665,8 @@ check_for_root
 source_config
 
 if [ "$kagami_mode" = "install_package" ] || [ "$kagami_mode" = "emerge_package" ] || [ "$kagami_mode" = "remove_package" ]; then
-	if [ "$ROOTDIR" != "/" ]; then
-		ROOTDIR="${ROOTDIR%/}"
+	if [ -n "$ROOTDIR" ]; then
+		 ROOTDIR="${ROOTDIR%/}"
 	fi
 
 	for mypackages in "$@"; do
