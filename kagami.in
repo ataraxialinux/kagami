@@ -264,7 +264,11 @@ compile_package() {
 
 	if type build > /dev/null 2>&1; then
 		msgtwo "Compiling package"
-		build || dietwo "Failed to compile package"
+		if [ "$VERBOSE" = "yes" ]; then
+			build || dietwo "Failed to compile package"
+		else
+			build >&2 || dietwo "Failed to compile package"
+		fi
 	fi
 
 	cd "$PKG"
@@ -409,33 +413,29 @@ list_uninstall() {
 }
 
 backup_save() {
-	if [ "$HAS_BACKUP" = "1" ]; then
-		if [ "$NOBACKUP" != "yes" ]; then
-			if [ -f "$TMPDIR/data/BACKUP" ]; then
-				msgtwo "Saving required files"
-				local mybackup
-				for mybackup in $(cat "$TMPDIR/data/BACKUP"); do
-					if [ -f "$ROOTDIR/$mybackup" ]; then
-						mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.bak" || dietwo "Failed to save $mybackup"
-					fi
-				done
-			fi
+	if [ "$NOBACKUP" != "yes" ]; then
+		if [ -f "$TMPDIR/data/BACKUP" ]; then
+			msgtwo "Saving required files"
+			local mybackup
+			for mybackup in $(cat "$TMPDIR/data/BACKUP"); do
+				if [ -f "$ROOTDIR/$mybackup" ]; then
+					mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.bak" || dietwo "Failed to save $mybackup"
+				fi
+			done
 		fi
 	fi
 }
 
 backup_restore() {
-	if [ "$HAS_BACKUP" = "1" ]; then
-		if [ "$NOBACKUP" != "yes" ]; then
-			if [ -f "$TMPDIR/data/BACKUP" ]; then
-				msgtwo "Restoring required files"
-				local mybackup
-				for mybackup in $(cat "$TMPDIR/data/BACKUP"); do
-					if [ -f "$ROOTDIR/$mybackup.bak" ]; then
-						mv "$ROOTDIR/$mybackup.bak" "$ROOTDIR/$mybackup" || dietwo "Failed to restore $mybackup"
-					fi
-				done
-			fi
+	if [ "$NOBACKUP" != "yes" ]; then
+		if [ -f "$TMPDIR/data/BACKUP" ]; then
+			msgtwo "Restoring required files"
+			local mybackup
+			for mybackup in $(cat "$TMPDIR/data/BACKUP"); do
+				if [ -f "$ROOTDIR/$mybackup.bak" ]; then
+					mv "$ROOTDIR/$mybackup.bak" "$ROOTDIR/$mybackup" || dietwo "Failed to restore $mybackup"
+				fi
+			done
 		fi
 	fi
 }
@@ -443,12 +443,10 @@ backup_restore() {
 run_scripts() {
 	local myopt=$1
 
-	if [ "$HAS_INSTALL" = "1" ]; then
-		if [ "$NOSCRIPTS" != "yes" ]; then
-			if [ -x "$ROOTDIR/$SCIPTS/$dpkg" ]; then
-				msgtwo "Running $myopt scripts"
-				chroot "$ROOTDIR" $SCIPTS/$dpkg $myopt
-			fi
+	if [ "$NOSCRIPTS" != "yes" ]; then
+		if [ -x "$ROOTDIR/$SCIPTS/$dpkg" ]; then
+			msgtwo "Running $myopt scripts"
+			chroot "$ROOTDIR" $SCIPTS/$dpkg $myopt
 		fi
 	fi
 }
@@ -460,7 +458,7 @@ install_package() {
 	unset NAME VERSION RELEASE
 
 	if [ ! -f "$pkg" ]; then
-		die "Your package file is not found or not specified"
+		die "Your package file was not found or not specified"
 	fi
 
 	TMPDIR="$(mktemp -d)" || die "Couldn't create a temporary directory"
@@ -522,17 +520,25 @@ install_package() {
 		fi
 	fi
 
+	if [ "$HAS_BACKUP" = "1" ]; then
+		cp "$TMPDIR/data/BACKUP" "$ROOTDIR/$PACKAGES/$dpkg/BACKUP"
+	fi
+
 	if [ "$HAS_INSTALL" = "1" ]; then
 		cp "$TMPDIR/data/INSTALL" "$ROOTDIR/$SCRIPTS/$dpkg"
 	fi
 
-	if [ "$UPDATE" = "1" ]; then
-		run_scripts pre-update
-	else
-		run_scripts pre-install
+	if [ "$HAS_INSTALL" = "1" ]; then
+		if [ "$UPDATE" = "1" ]; then
+			run_scripts pre-update
+		else
+			run_scripts pre-install
+		fi
 	fi
 
-	backup_save
+	if [ "$HAS_BACKUP" = "1" ]; then
+		backup_save
+	fi
 
 	msgtwo "Installing package contents"
 	bsdtar -xf "$pkg" -C "$ROOTDIR"  2>/dev/null || dietwo "Failed to install package contents"
@@ -542,16 +548,52 @@ install_package() {
 		list_subtract "$TMPDIR/data/CONTENTS.old" "$TMPDIR/data/CONTENTS" | list_uninstall -
 	fi
 
-	backup_restore
+	if [ "$HAS_BACKUP" = "1" ]; then
+		backup_restore
+	fi
 
-	if [ "$UPDATE" = "1" ]; then
-		run_scripts post-update
-	else
-		run_scripts post-install
+	if [ "$HAS_INSTALL" = "1" ]; then
+		if [ "$UPDATE" = "1" ]; then
+			run_scripts post-update
+		else
+			run_scripts post-install
+		fi
 	fi
 
 	rm -rf "$TMPDIR"
 	msg "Package was successfully installed"
+}
+
+remove_package() {
+	local pkg
+	pkg="$1"
+
+	if [ -z "$pkg" ]; then
+		die "Your package was not specified"
+	fi
+
+	if [ ! -d "$ROOTDIR/$PACKAGES/$dpkg" ]; then
+		die "Your package is not installed"
+	fi
+
+	msg "Remoing package: '${pkg}'"
+
+	run_scripts pre-remove
+
+	backup_save
+
+	dirlist=`grep '/$' "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"`
+	nondir=`grep -v '/$' "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"`
+	list_uninstall "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"
+
+	backup_restore
+
+	run_scripts post-remove
+
+	msgtwo "Removing package's information"
+	rm -rf "$ROOTDIR/$PACKAGES/$pkg" "$ROOTDIR/$SCRIPTS/$pkg"
+
+	msg "Package was successfully removed"
 }
 
 export LC_ALL=POSIX
@@ -582,8 +624,9 @@ NOCONFLICTS="no"
 NOSCRIPTS="no"
 NOHOOKS="no"
 USEBOOTSTRAP="no"
+VERBOSE="no"
 
-while getopts :IBERoCDxbpnXdfsHWc:r:vh options; do
+while getopts :IBERoCDxbpnXdfsHWVc:r:vh options; do
 	case $options in
 		I)
 			kagami_mode=install_package
@@ -641,6 +684,9 @@ while getopts :IBERoCDxbpnXdfsHWc:r:vh options; do
 			;;
 		W)
 			USEBOOTSTRAP="yes"
+			;;
+		V)
+			VERBOSE="yes"
 			;;
 		v)
 			version
