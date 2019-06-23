@@ -106,6 +106,8 @@ source_recipe() {
 
 	depends=$(grep "^# Depends on[[:blank:]]*:" "$MYPORT" | sed 's/^# Depends on[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')
 	conflicts=$(grep "^# Conflicts with[[:blank:]]*:" "$MYPORT" | sed 's/^# Conflicts with[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')
+	
+	TARGET="$PKGDEST/${name}#${version}+${release}.kagami"
 }
 
 get_filename() {
@@ -264,11 +266,7 @@ compile_package() {
 
 	if type build > /dev/null 2>&1; then
 		msgtwo "Compiling package"
-		if [ "$VERBOSE" = "yes" ]; then
-			build || dietwo "Failed to compile package"
-		else
-			build >&2 || dietwo "Failed to compile package"
-		fi
+		build || dietwo "Failed to compile package"
 	fi
 
 	cd "$PKG"
@@ -323,8 +321,6 @@ compile_package() {
 }
 
 create_package() {
-	TARGET="$PKGDEST/${name}#${version}+${release}.kagami"
-
 	msgtwo "Generating package metadata"
 	cd "$PKG"
 
@@ -718,9 +714,9 @@ NOCONFLICTS="no"
 NOSCRIPTS="no"
 NOHOOKS="no"
 USEBOOTSTRAP="no"
-VERBOSE="no"
+FORCE="no"
 
-while getopts :IBERoCDxbpnXdfsHWVawc:r:vh options; do
+while getopts :IBERoCDxbpnXdfsHWawfc:r:vh options; do
 	case $options in
 		I)
 			kagami_mode=install_package
@@ -791,8 +787,8 @@ while getopts :IBERoCDxbpnXdfsHWVawc:r:vh options; do
 		W)
 			USEBOOTSTRAP="yes"
 			;;
-		V)
-			VERBOSE="yes"
+		f)
+			FORCE="yes"
 			;;
 		v)
 			version
