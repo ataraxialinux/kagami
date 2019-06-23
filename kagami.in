@@ -600,6 +600,10 @@ emerge_package() {
 	local myrepos pkg
 	pkg="$1"
 
+	if [ -z "$REPOS" ]; then
+		die "You haven't specified repositories"
+	fi
+
 	for myrepos in ${REPOS[@]}; do
 		if [ -d "$myrepos/$pkg" ]; then
 			pushd "$myrepos/$pkg"
@@ -638,6 +642,11 @@ emerge_package() {
 
 sysup() {
 	local mypackages myrepos myfolder kagamibuild NEWVER OLDVER a
+
+	if [ -z "$REPOS" ]; then
+		die "You haven't specified repositories"
+	fi
+
 	for mypackages in $("$ROOTDIR/$PACKAGES/" ); do
 		for myrepos in ${REPOS[@]}; do
 			if [ -d "$myrepos/$mypackages" ]; then
