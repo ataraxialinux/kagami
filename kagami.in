@@ -607,6 +607,7 @@ emerge_package() {
 	for myrepos in ${REPOS[@]}; do
 		if [ -d "$myrepos/$pkg" ]; then
 			pushd "$myrepos/$pkg"
+				TOPDIR="$myrepos/$pkg"
 				source_recipe
 
 				if [ "$NOCONFLICTS" != "yes" ]; then
