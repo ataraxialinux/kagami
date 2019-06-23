@@ -346,7 +346,6 @@ create_package() {
 	fi
 
 	msgtwo "Creating package archive"
-	rm -rf "$TARGET"
 	bsdtar -c --zstd -f "$TARGET" .
 
 	msg "Package have been successfully built"
@@ -359,32 +358,38 @@ build_package() {
 	source_recipe
 	msg "Building package: '${name}'"
 
-	rm -rf "$WORK"
-	mkdir -p "$PKG" "$SRC"
-
-	if [ "$USEBOOTSTRAP" = "yes" ]; then
-		dietwo "This package couldn't be built in the cross environment"
+	if [ "$FORCE" = "yes" ]; then
+		rm -rf "$TARGET"
 	fi
 
-	if [ "$NODOWNLOAD" != "yes" ]; then
-		download_source
-	fi
+	if [ ! -f "$TARGET" ]; then
+		rm -rf "$WORK"
+		mkdir -p "$PKG" "$SRC"
 
-	if [ "$NOUNPACK" != "yes" ]; then
-		unpack_source
-	fi
+		if [ "$USEBOOTSTRAP" = "yes" ]; then
+			dietwo "This package couldn't be built in the cross environment"
+		fi
 
-	if [ "$NOBUILD" != "yes" ]; then
-		compile_package
-	fi
+		if [ "$NODOWNLOAD" != "yes" ]; then
+			download_source
+		fi
 
-	if [ "$NOPACKAGE" != "yes" ]; then
-		create_package
-	fi
+		if [ "$NOUNPACK" != "yes" ]; then
+			unpack_source
+		fi
 
-	if [ "$NOPACKAGE" != "yes" ]; then
-		if [ "$NOCLEAN" != "yes" ]; then
-			rm -rf "$WORK"
+		if [ "$NOBUILD" != "yes" ]; then
+			compile_package
+		fi
+
+		if [ "$NOPACKAGE" != "yes" ]; then
+			create_package
+		fi
+
+		if [ "$NOPACKAGE" != "yes" ]; then
+			if [ "$NOCLEAN" != "yes" ]; then
+				rm -rf "$WORK"
+			fi
 		fi
 	fi
 }
@@ -451,7 +456,12 @@ run_scripts() {
 
 install_package() {
 	local pkg apkg bpkg cpkg dpkg TMPDIR UPDATE HAS_FILES HAS_BACKUP HAS_INSTALL RUN_SUBSTRACT
-	pkg="$1"
+
+	if [ -n "$TARGET" ]; then
+		pkg="$TARGET"
+	else
+		pkg="$1"
+	fi
 
 	unset NAME VERSION RELEASE
 
