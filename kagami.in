@@ -828,13 +828,10 @@ shift $((OPTIND - 1))
 check_for_root
 source_config
 
-if [ -n "$ROOTDIR" ]; then
-	ROOTDIR="$(realpath $ROOTDIR)"
-fi
-
 if [ "$kagami_mode" = "install_package" ] || [ "$kagami_mode" = "emerge_package" ] || [ "$kagami_mode" = "remove_package" ]; then
 	if [ -n "$ROOTDIR" ]; then
-		 ROOTDIR="${ROOTDIR%/}"
+		ROOTDIR="$(realpath $ROOTDIR)"
+		ROOTDIR="${ROOTDIR%/}"
 	fi
 
 	for mypackages in "$@"; do
