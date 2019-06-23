@@ -565,7 +565,7 @@ install_package() {
 }
 
 remove_package() {
-	local pkg
+	local pkg dirlist nondir
 	pkg="$1"
 
 	if [ -z "$pkg" ]; then
@@ -596,6 +596,84 @@ remove_package() {
 	msg "Package was successfully removed"
 }
 
+emerge_package() {
+	local myrepos pkg
+	pkg="$1"
+
+	for myrepos in ${REPOS[@]}; do
+		if [ -d "$myrepos/$pkg" ]; then
+			pushd "$myrepos/$pkg"
+				source_recipe
+
+				if [ "$NOCONFLICTS" != "yes" ]; then
+					if [ -n "$conflicts" ]; then
+						local myconflicts
+						for myconflicts in $conflicts; do
+							if [ -d "$ROOTDIR/$PACKAGES/$myconflicts" ]; then
+								die "Your package is conflicting with $myconflicts"
+							fi
+						done
+					fi
+				fi
+
+				if [ "$NODEPENDS" != "yes" ]; then
+					if [ -n "$depends" ]; then
+						local mydepends
+						for mydepends in $depends; do
+							if [ ! -d "$ROOTDIR/$PACKAGES/$mydepends" ]; then
+								emerge_package $mydepends
+							fi
+						done
+					fi
+				fi
+
+				build_package
+				install_package "$TARGET"
+			popd
+		else
+			die "You package doesn't exist"
+		fi
+	done
+}
+
+sysup() {
+	local mypackages myrepos myfolder kagamibuild NEWVER OLDVER a
+	for mypackages in $("$ROOTDIR/$PACKAGES/" ); do
+		for myrepos in ${REPOS[@]}; do
+			if [ -d "$myrepos/$mypackages" ]; then
+				myfolder="$myrepos/$mypackages"
+
+				if [ -f "$myfolder/KagamiBuild" ]; then
+					kagamibuild="$myfolder/KagamiBuild"
+				elif [ -f "$myfolder/KBUILD" ]; then
+					kagamibuild="$myfolder/KBUILD"
+				elif [ -f "$myfolder/Pkgfile" ]; then
+					kagamibuild="$myfolder/Pkgfile"
+				fi
+
+				NEWVER="$(grep ^version $kagamibuild | sed -e 's,version=,,g')-$(grep ^release $kagamibuild/MANIFEST | sed -e 's,release=,,g')"
+				OLDVER="$(grep ^VERSION "$ROOTDIR/$PACKAGES/$mypackages/METAFILE" | sed -e 's,VERSION=,,g')-$(grep ^RELEASE "$ROOTDIR/$PACKAGES/$mypackages/METAFILE" | sed -e 's,RELEASE=,,g')"
+
+				vercmp $OLDVER $NEWVER
+				if [ $? = 255 ]; then
+					echo "$mypackages" >> /tmp/2update
+				fi
+
+				if [ -z "$(cat /tmp/2update)" ]; then
+					warn "Don't need to perform system update"
+					exit
+				fi
+
+				for a in $(cat /tmp/2update); do
+					emerge_package $a
+				done
+
+				rm -rf /tmp/2update
+			fi
+		done
+	done
+}
+
 export LC_ALL=POSIX
 export VERSION="@VERSION@"
 export TOPDIR="$PWD"
@@ -611,6 +689,7 @@ OPTIONS=('emptydirs' 'strip' 'makeflags' 'locales' 'docs')
 DATABASE="/var/lib/kagami"
 PACKAGES="$DATABASE/pkgs"
 SCRIPTS="$DATABASE/scripts"
+REPOS=('/var/cache/ports/packages')
 NOOPTIONS="no"
 NOCLEAN="no"
 NODOWNLOAD="no"
@@ -626,7 +705,7 @@ NOHOOKS="no"
 USEBOOTSTRAP="no"
 VERBOSE="no"
 
-while getopts :IBERoCDxbpnXdfsHWVc:r:vh options; do
+while getopts :IBERoCDxbpnXdfsHWVawc:r:vh options; do
 	case $options in
 		I)
 			kagami_mode=install_package
@@ -636,6 +715,18 @@ while getopts :IBERoCDxbpnXdfsHWVc:r:vh options; do
 			;;
 		E)
 			kagami_mode=emerge_package
+			;;
+		a)
+			if [ "$kagami_mode" = "emerge_package" ]; then
+				sysup
+			fi
+			;;
+		w)
+			if [ "$kagami_mode" = "emerge_package" ]; then
+				for a in $("$ROOTDIR/$PACKAGES/" ); do
+					emerge_package $a
+				done
+			fi
 			;;
 		R)
 			kagami_mode=remove_package
