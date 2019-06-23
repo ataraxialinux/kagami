@@ -34,18 +34,18 @@ install_src() {
 DESTDIR=
 PREFIX=/usr/local
 
-while getopts :ibpd: options; do
+while getopts :IBPD: options; do
 	case $options in
-		b)
+		B)
 			mode=build
 			;;
-		i)
+		I)
 			mode=install
 			;;
-		p)
+		P)
 			PREFIX="${OPTARG}"
 			;;
-		d)
+		D)
 			DESTDIR="${OPTARG}"
 			;;
 		:)

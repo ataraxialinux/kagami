@@ -386,8 +386,10 @@ build_package() {
 		create_package
 	fi
 
-	if [ "$NOCLEAN" != "yes" ]; then
-		rm -rf "$WORK"
+	if [ "$NOPACKAGE" != "yes" ]; then
+		if [ "$NOCLEAN" != "yes" ]; then
+			rm -rf "$WORK"
+		fi
 	fi
 }
 
@@ -633,7 +635,10 @@ emerge_package() {
 				fi
 
 				build_package
-				install_package "$TARGET"
+
+				if [ "$NOPACKAGE" != "yes" ]; then
+					install_package "$TARGET"
+				fi
 			popd
 		else
 			die "You package doesn't exist"
