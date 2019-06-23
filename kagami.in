@@ -106,7 +106,7 @@ source_recipe() {
 
 	depends=$(grep "^# Depends on[[:blank:]]*:" "$MYPORT" | sed 's/^# Depends on[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')
 	conflicts=$(grep "^# Conflicts with[[:blank:]]*:" "$MYPORT" | sed 's/^# Conflicts with[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')
-	
+
 	TARGET="$PKGDEST/${name}#${version}+${release}.kagami"
 }
 
@@ -266,7 +266,13 @@ compile_package() {
 
 	if type build > /dev/null 2>&1; then
 		msgtwo "Compiling package"
-		build || dietwo "Failed to compile package"
+		(
+			set -e
+			build
+		)
+		if [ ! $? -eq 0 ]; then
+			die "Failed to compile package"
+		fi
 	fi
 
 	cd "$PKG"
@@ -726,7 +732,7 @@ NOHOOKS="no"
 USEBOOTSTRAP="no"
 FORCE="no"
 
-while getopts :IBERoCDxbpnXdfsHWawfc:r:vh options; do
+while getopts :IBERoCDxbpnXdfsHWawFc:r:vh options; do
 	case $options in
 		I)
 			kagami_mode=install_package
@@ -797,7 +803,7 @@ while getopts :IBERoCDxbpnXdfsHWawfc:r:vh options; do
 		W)
 			USEBOOTSTRAP="yes"
 			;;
-		f)
+		F)
 			FORCE="yes"
 			;;
 		v)
