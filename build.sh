@@ -29,6 +29,7 @@ build_src() {
 install_src() {
 	install -Dvm775 kagami "${DESTDIR}"${PREFIX}/bin/kagami
 	install -Dvm775 vercmp "${DESTDIR}"${PREFIX}/bin/vercmp
+	install -Dvm644 kagami.conf "${DESTDIR}"/etc/kagami.conf
 }
 
 DESTDIR=

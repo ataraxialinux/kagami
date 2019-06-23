@@ -84,6 +84,9 @@ source_config() {
 }
 
 source_recipe() {
+	unset name version release source backup options depends conflicts
+	unset -f build
+
 	if [ -f "$TOPDIR/KagamiBuild" ]; then
 		MYPORT="$TOPDIR/KagamiBuild"
 	elif [ -f "$TOPDIR/KBUILD" ]; then
@@ -104,8 +107,8 @@ source_recipe() {
 		dietwo "The release of package is not set"
 	fi
 
-	depends=$(grep "^# Depends on[[:blank:]]*:" "$MYPORT" | sed 's/^# Depends on[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')
-	conflicts=$(grep "^# Conflicts with[[:blank:]]*:" "$MYPORT" | sed 's/^# Conflicts with[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')
+	depends="$(grep "^# Depends on[[:blank:]]*:" "$MYPORT" | sed 's/^# Depends on[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')"
+	conflicts="$(grep "^# Conflicts with[[:blank:]]*:" "$MYPORT" | sed 's/^# Conflicts with[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')"
 
 	TARGET="$PKGDEST/${name}#${version}+${release}.kagami"
 }
@@ -611,7 +614,7 @@ remove_package() {
 }
 
 emerge_package() {
-	local myrepos pkg
+	local myrepos pkg MYPORT depends conflicts
 	pkg="$1"
 
 	if [ -z "$REPOS" ]; then
@@ -640,12 +643,17 @@ emerge_package() {
 						local mydepends
 						for mydepends in $depends; do
 							if [ ! -d "$ROOTDIR/$PACKAGES/$mydepends" ]; then
+								unset name version release source backup options depends conflicts
+								unset -f build
 								emerge_package $mydepends
+								unset name version release source backup options depends conflicts
+								unset -f build
 							fi
 						done
 					fi
 				fi
 
+				source_recipe
 				build_package
 
 				if [ "$NOPACKAGE" != "yes" ]; then
