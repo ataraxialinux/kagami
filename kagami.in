@@ -17,9 +17,6 @@ die() {
 	echo -e "\033[1;31m >>> \033[0m$@"
 
 	if [ "$kagami_mode" = "build_package" ]; then
-		unset name version release source backup options TARGET
-		unset -f build
-
 		if [ "$NOCLEAN" != "yes" ]; then
 			rm -rf "$WORK"
 		fi
@@ -27,9 +24,6 @@ die() {
 		rm -rf "$TMPDIR"
 		unset NAME VERSION RELEASE
 	elif [ "$kagami_mode" = "emerge_package" ]; then
-		unset name version release source backup options TARGET
-		unset -f build
-
 		if [ "$NOCLEAN" != "yes" ]; then
 			rm -rf "$WORK"
 		fi
@@ -45,9 +39,6 @@ dietwo() {
 	echo -e "\033[1;31m * \033[0m$@"
 
 	if [ "$kagami_mode" = "build_package" ]; then
-		unset name version release source backup options TARGET
-		unset -f build
-
 		if [ "$NOCLEAN" != "yes" ]; then
 			rm -rf "$WORK"
 		fi
@@ -55,9 +46,6 @@ dietwo() {
 		rm -rf "$TMPDIR"
 		unset NAME VERSION RELEASE
 	elif [ "$kagami_mode" = "emerge_package" ]; then
-		unset name version release source backup options TARGET
-		unset -f build
-
 		if [ "$NOCLEAN" != "yes" ]; then
 			rm -rf "$WORK"
 		fi
@@ -84,9 +72,6 @@ source_config() {
 }
 
 source_recipe() {
-	unset name version release source backup options TARGET
-	unset -f build
-
 	if [ -f "$TOPDIR/KagamiBuild" ]; then
 		MYPORT="$TOPDIR/KagamiBuild"
 	elif [ -f "$TOPDIR/KBUILD" ]; then
@@ -361,9 +346,6 @@ create_package() {
 }
 
 build_package() {
-	unset name version release source backup options depends conflicts
-	unset -f build
-
 	source_recipe
 	msg "Building package: '${name}'"
 
@@ -633,17 +615,6 @@ find_portdir() {
 			echo "$myrepos/$pkg"
 		fi
 	done
-}
-
-if_package_installed() {
-	local pkg
-	pkg="$1"
-
-	if [ -d "$ROOTDIR/$PACKAGES/$pkg" ]; then
-		echo "yes"
-	else
-		echo "no"
-	fi
 }
 
 emerge_package() {
