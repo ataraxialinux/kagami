@@ -688,8 +688,12 @@ emerge_package() {
 			mbpkg="${apkg%*.kagami}"
 			mcpkg="${bpkg%+*}"
 			mdpkg="${cpkg%#*}"
-			if [ "$SYSUP" != "1" ]; then
-				if [ "$(if_package_installed $mdpkg)" = "no" ]; then
+			if [ "$FORCE" != "yes" ]; then
+				if [ "$SYSUP" != "1" ]; then
+					if [ "$(if_package_installed $mdpkg)" = "no" ]; then
+						install_package
+					fi
+				else
 					install_package
 				fi
 			else
