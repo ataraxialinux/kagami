@@ -614,56 +614,7 @@ remove_package() {
 }
 
 emerge_package() {
-	local myrepos pkg MYPORT depends conflicts
-	pkg="$1"
-
-	if [ -z "$REPOS" ]; then
-		die "You haven't specified repositories"
-	fi
-
-	for myrepos in ${REPOS[@]}; do
-		if [ -d "$myrepos/$pkg" ]; then
-			pushd "$myrepos/$pkg"
-				TOPDIR="$myrepos/$pkg"
-				source_recipe
-
-				if [ "$NOCONFLICTS" != "yes" ]; then
-					if [ -n "$conflicts" ]; then
-						local myconflicts
-						for myconflicts in $conflicts; do
-							if [ -d "$ROOTDIR/$PACKAGES/$myconflicts" ]; then
-								die "Your package is conflicting with $myconflicts"
-							fi
-						done
-					fi
-				fi
-
-				if [ "$NODEPENDS" != "yes" ]; then
-					if [ -n "$depends" ]; then
-						local mydepends
-						for mydepends in $depends; do
-							if [ ! -d "$ROOTDIR/$PACKAGES/$mydepends" ]; then
-								unset name version release source backup options depends conflicts
-								unset -f build
-								emerge_package $mydepends
-								unset name version release source backup options depends conflicts
-								unset -f build
-							fi
-						done
-					fi
-				fi
-
-				source_recipe
-				build_package
-
-				if [ "$NOPACKAGE" != "yes" ]; then
-					install_package "$TARGET"
-				fi
-			popd
-		else
-			die "You package doesn't exist"
-		fi
-	done
+	:
 }
 
 sysup() {
