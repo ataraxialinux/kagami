@@ -367,6 +367,13 @@ build_package() {
 	source_recipe
 	msg "Building package: '${name}'"
 
+	if [ -z "$PKGDEST" ]; then
+		PKGDEST="$TOPDIR"
+	fi
+	if [ -z "$SRCDEST" ]; then
+		SRCDEST="$TOPDIR"
+	fi
+
 	if [ "$FORCE" = "yes" ]; then
 		rm -rf "$TARGET"
 	fi
@@ -724,8 +731,6 @@ DATABASE="/var/lib/kagami"
 PACKAGES="$DATABASE/pkgs"
 SCRIPTS="$DATABASE/scripts"
 REPOS=('/var/cache/ports/packages')
-PKGDEST="$TOPDIR"
-SRCDEST="$TOPDIR"
 NOOPTIONS="no"
 NOCLEAN="no"
 NODOWNLOAD="no"
