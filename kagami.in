@@ -17,7 +17,7 @@ die() {
 	echo -e "\033[1;31m >>> \033[0m$@"
 
 	if [ "$kagami_mode" = "build_package" ]; then
-		unset name version release source backup options depends conflicts
+		unset name version release source backup options
 		unset -f build
 
 		if [ "$NOCLEAN" != "yes" ]; then
@@ -27,7 +27,7 @@ die() {
 		rm -rf "$TMPDIR"
 		unset NAME VERSION RELEASE
 	elif [ "$kagami_mode" = "emerge_package" ]; then
-		unset name version release source backup options depends conflicts
+		unset name version release source backup options
 		unset -f build
 
 		if [ "$NOCLEAN" != "yes" ]; then
@@ -45,7 +45,7 @@ dietwo() {
 	echo -e "\033[1;31m * \033[0m$@"
 
 	if [ "$kagami_mode" = "build_package" ]; then
-		unset name version release source backup options depends conflicts
+		unset name version release source backup options
 		unset -f build
 
 		if [ "$NOCLEAN" != "yes" ]; then
@@ -55,7 +55,7 @@ dietwo() {
 		rm -rf "$TMPDIR"
 		unset NAME VERSION RELEASE
 	elif [ "$kagami_mode" = "emerge_package" ]; then
-		unset name version release source backup options depends conflicts
+		unset name version release source backup options
 		unset -f build
 
 		if [ "$NOCLEAN" != "yes" ]; then
@@ -670,12 +670,11 @@ emerge_package() {
 
 		if [ "$NODEPENDS" != "yes" ]; then
 			if [ -n "$depends" ]; then
-				local mydepends
-					for mydepends in $depends; do
-						if [ ! -d "$ROOTDIR/$PACKAGES/$mydepends" ]; then
-							emerge_package $mydepends
-						fi
-					done
+				for mydepends in $depends; do
+					if [ ! -d "$ROOTDIR/$PACKAGES/$mydepends" ]; then
+						emerge_package $mydepends
+					fi
+				done
 			fi
 		fi
 
