@@ -84,7 +84,7 @@ source_config() {
 }
 
 source_recipe() {
-	unset name version release source backup options depends conflicts
+	unset name version release source backup options
 	unset -f build
 
 	if [ -f "$TOPDIR/KagamiBuild" ]; then
@@ -673,7 +673,6 @@ emerge_package() {
 				local mydepends
 					for mydepends in $depends; do
 						if [ ! -d "$ROOTDIR/$PACKAGES/$mydepends" ]; then
-							TOPDIR="$(find_portdir $mydepends)"
 							emerge_package $mydepends
 						fi
 					done
@@ -684,21 +683,7 @@ emerge_package() {
 		build_package
 
 		if [ "$NOPACKAGE" != "yes" ]; then
-			mapkg="$(basename $TARGET)"
-			mbpkg="${apkg%*.kagami}"
-			mcpkg="${bpkg%+*}"
-			mdpkg="${cpkg%#*}"
-			if [ "$FORCE" != "yes" ]; then
-				if [ "$SYSUP" != "1" ]; then
-					if [ "$(if_package_installed $mdpkg)" = "no" ]; then
-						install_package
-					fi
-				else
-					install_package
-				fi
-			else
-				install_package
-			fi
+			install_package
 		fi
 	popd
 }
