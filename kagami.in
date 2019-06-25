@@ -635,8 +635,19 @@ find_portdir() {
 	done
 }
 
-emerge_package() {
+if_package_installed() {
 	local pkg
+	pkg="$1"
+
+	if [ -d "$ROOTDIR/$PACKAGES/$pkg" ]; then
+		echo "yes"
+	else
+		echo "no"
+	fi
+}
+
+emerge_package() {
+	local pkg mapkg mbpkg mcpkg mdpkg
 	pkg="$1"
 
 	if [ -z "$REPOS" ]; then
@@ -671,53 +682,25 @@ emerge_package() {
 
 		source_recipe
 		build_package
+
 		if [ "$NOPACKAGE" != "yes" ]; then
-			install_package "$TARGET"
+			mapkg="$(basename $TARGET)"
+			mbpkg="${apkg%*.kagami}"
+			mcpkg="${bpkg%+*}"
+			mdpkg="${cpkg%#*}"
+			if [ "$SYSUP" != "1" ]; then
+				if [ "$(if_package_installed $mdpkg)" = "no" ]; then
+					install_package
+				fi
+			else
+				install_package
+			fi
 		fi
 	popd
 }
 
 sysup() {
-	local mypackages myrepos myfolder kagamibuild NEWVER OLDVER a
-
-	if [ -z "$REPOS" ]; then
-		die "You haven't specified repositories"
-	fi
-
-	for mypackages in $("$ROOTDIR/$PACKAGES/" ); do
-		for myrepos in ${REPOS[@]}; do
-			if [ -d "$myrepos/$mypackages" ]; then
-				myfolder="$myrepos/$mypackages"
-
-				if [ -f "$myfolder/KagamiBuild" ]; then
-					kagamibuild="$myfolder/KagamiBuild"
-				elif [ -f "$myfolder/KBUILD" ]; then
-					kagamibuild="$myfolder/KBUILD"
-				elif [ -f "$myfolder/Pkgfile" ]; then
-					kagamibuild="$myfolder/Pkgfile"
-				fi
-
-				NEWVER="$(grep ^version $kagamibuild | sed -e 's,version=,,g')-$(grep ^release $kagamibuild/MANIFEST | sed -e 's,release=,,g')"
-				OLDVER="$(grep ^VERSION "$ROOTDIR/$PACKAGES/$mypackages/METAFILE" | sed -e 's,VERSION=,,g')-$(grep ^RELEASE "$ROOTDIR/$PACKAGES/$mypackages/METAFILE" | sed -e 's,RELEASE=,,g')"
-
-				vercmp $OLDVER $NEWVER
-				if [ $? = 255 ]; then
-					echo "$mypackages" >> /tmp/2update
-				fi
-
-				if [ -z "$(cat /tmp/2update)" ]; then
-					warn "Don't need to perform system update"
-					exit
-				fi
-
-				for a in $(cat /tmp/2update); do
-					emerge_package $a
-				done
-
-				rm -rf /tmp/2update
-			fi
-		done
-	done
+	:
 }
 
 export LC_ALL=POSIX
