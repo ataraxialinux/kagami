@@ -87,6 +87,13 @@ source_recipe() {
 	unset name version release source backup options depends conflicts
 	unset -f build
 
+	TOPDIR="$(pwd)"
+	if [ -z "$PKGDEST" ]; then
+		PKGDEST="$TOPDIR"
+	fi
+	if [ -z "$SRCDEST" ]; then
+		SRCDEST="$TOPDIR"
+	fi
 	if [ -f "$TOPDIR/KagamiBuild" ]; then
 		MYPORT="$TOPDIR/KagamiBuild"
 	elif [ -f "$TOPDIR/KBUILD" ]; then
@@ -372,6 +379,10 @@ build_package() {
 	fi
 
 	if [ ! -f "$TARGET" ]; then
+		WORK="$PWD/work"
+		PKG="$WORK/pkg"
+		SRC="$WORK/src"
+
 		rm -rf "$WORK"
 		mkdir -p "$PKG" "$SRC"
 
@@ -613,8 +624,56 @@ remove_package() {
 	msg "Package was successfully removed"
 }
 
+find_portdir() {
+	local pkg
+	pkg="$1"
+
+	for myrepos in ${REPOS[@]}; do
+		if [ -d "$myrepos/$pkg" ]; then
+			echo "$myrepos/$pkg"
+		fi
+	done
+}
+
 emerge_package() {
-	:
+	local pkg
+	pkg="$1"
+
+	if [ -z "$REPOS" ]; then
+		die "You haven't specified repositories"
+	fi
+
+	pushd "$(find_portdir $pkg)"
+		source_recipe
+
+		if [ "$NOCONFLICTS" != "yes" ]; then
+			if [ -n "$conflicts" ]; then
+				for myconflicts in ${conflicts[@]}; do
+					if [ -d "$ROOTDIR/$PACKAGES/$myconflicts" ]; then
+						die "Your package is conflicting with $myconflicts"
+					fi
+				done
+			fi
+		fi
+
+		if [ "$NODEPENDS" != "yes" ]; then
+			if [ -n "$depends" ]; then
+				local mydepends
+					for mydepends in $depends; do
+						if [ ! -d "$ROOTDIR/$PACKAGES/$mydepends" ]; then
+							TOPDIR="$(find_portdir $mydepends)"
+							emerge_package $mydepends
+						fi
+					done
+			fi
+		fi
+
+		source_recipe
+		build_package
+		if [ "$NOPACKAGE" != "yes" ]; then
+			install_package "$TARGET"
+		fi
+	popd
 }
 
 sysup() {
@@ -662,15 +721,9 @@ sysup() {
 
 export LC_ALL=POSIX
 export VERSION="@VERSION@"
-export TOPDIR="$PWD"
 
 CONFIG="/etc/kagami.conf"
 ROOTDIR=''
-WORK="$TOPDIR/work"
-PKG="$WORK/pkg"
-SRC="$WORK/src"
-PKGDEST="$TOPDIR"
-SRCDEST="$TOPDIR"
 OPTIONS=('emptydirs' 'strip' 'makeflags' 'locales' 'docs')
 DATABASE="/var/lib/kagami"
 PACKAGES="$DATABASE/pkgs"
