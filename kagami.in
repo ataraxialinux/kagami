@@ -664,6 +664,60 @@ sysup() {
 	:
 }
 
+version() {
+	printf "%s\n" \
+		"kagami version $VERSION" \
+		"" \
+		"Copyright (c) 2016-2019 Ataraxia Linux" \
+		"" \
+		"This software is licensed under ISC license." \
+		"For further information: https://www.isc.org/licenses/" \
+		""
+	exit 0
+}
+
+usage() {
+	printf "%s\n" \
+		"kagami - Small and simple packages manager for Ataraxia Linux" \
+		"" \
+		"Usage: kagami [OPTION...] [FILE...]" \
+		"" \
+		"Operations:" \
+		"   -I		Install packages from binary file (.kagami)" \
+		"   -B		Compile package from recipe" \
+		"   -R		Remove package from system" \
+		"   -E		Compile and install package from ports repository (emerge mode)" \
+		"   -c <FILE>	Specify configuration file for kagami" \
+		"   -r <DIR>	Specify directory for installing packages" \
+		"   -v		Show version of kagami" \
+		"   -h		Show usage information" \
+		"" \
+		"Options for installing and removing packages:" \
+		"   -n		Don't reinstall package" \
+		"   -X		Don't backup or restore packages" \
+		"   -d		Don't check for dependencies" \
+		"   -f		Don't check for conflicts" \
+		"   -s		Don't run scripts" \
+		"   -H		Don't run hooks/triggers" \
+		"   -F		Force installation or removal" \
+		"" \
+		"Options for 'emerge' mode:" \
+		"   -a		Run system upgrade" \
+		"   -w		Recompile everything" \
+		"" \
+		"Options for building packages:" \
+		"   -o		Don't use package options" \
+		"   -C		Don't perform cleanup" \
+		"   -D		Don't download source" \
+		"   -x		Don't extract sources" \
+		"   -b		Don't build package" \
+		"   -p		Don't create package" \
+		"" \
+		"BUG TRACKER: https://github.com/ataraxialinux/kagami/issues" \
+		""
+	exit 0
+}
+
 export LC_ALL=POSIX
 export VERSION="@VERSION@"
 export TOPDIR="$PWD"
@@ -708,7 +762,7 @@ while getopts :IBERoCDxbpnXdfsHWawFc:r:vh options; do
 			;;
 		w)
 			if [ "$kagami_mode" = "emerge_package" ]; then
-				SYSUP="1"
+				NEEDED="no"
 				FORCE="yes"
 				for a in $("$ROOTDIR/$PACKAGES/" ); do
 					emerge_package $a
