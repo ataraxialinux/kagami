@@ -87,13 +87,6 @@ source_recipe() {
 	unset name version release source backup options depends conflicts
 	unset -f build
 
-	TOPDIR="$(pwd)"
-	if [ -z "$PKGDEST" ]; then
-		PKGDEST="$TOPDIR"
-	fi
-	if [ -z "$SRCDEST" ]; then
-		SRCDEST="$TOPDIR"
-	fi
 	if [ -f "$TOPDIR/KagamiBuild" ]; then
 		MYPORT="$TOPDIR/KagamiBuild"
 	elif [ -f "$TOPDIR/KBUILD" ]; then
@@ -644,6 +637,7 @@ emerge_package() {
 	fi
 
 	pushd "$(find_portdir $pkg)"
+		export TOPDIR="$PWD"
 		source_recipe
 
 		if [ "$NOCONFLICTS" != "yes" ]; then
@@ -721,6 +715,7 @@ sysup() {
 
 export LC_ALL=POSIX
 export VERSION="@VERSION@"
+export TOPDIR="$PWD"
 
 CONFIG="/etc/kagami.conf"
 ROOTDIR=''
@@ -729,6 +724,8 @@ DATABASE="/var/lib/kagami"
 PACKAGES="$DATABASE/pkgs"
 SCRIPTS="$DATABASE/scripts"
 REPOS=('/var/cache/ports/packages')
+PKGDEST="$TOPDIR"
+SRCDEST="$TOPDIR"
 NOOPTIONS="no"
 NOCLEAN="no"
 NODOWNLOAD="no"
