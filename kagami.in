@@ -747,6 +747,8 @@ while getopts :IBERoCDxbpnXdfsHWawFc:r:vh options; do
 			;;
 		w)
 			if [ "$kagami_mode" = "emerge_package" ]; then
+				SYSUP="1"
+				FORCE="yes"
 				for a in $("$ROOTDIR/$PACKAGES/" ); do
 					emerge_package $a
 				done
