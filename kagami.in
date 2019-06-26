@@ -94,8 +94,6 @@ source_recipe() {
 
 	depends="$(grep "^# Depends on[[:blank:]]*:" "$MYPORT" | sed 's/^# Depends on[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')"
 	conflicts="$(grep "^# Conflicts with[[:blank:]]*:" "$MYPORT" | sed 's/^# Conflicts with[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')"
-
-	TARGET="$PKGDEST/${name}#${version}+${release}.kagami"
 }
 
 get_filename() {
@@ -356,6 +354,8 @@ build_package() {
 	if [ -z "$SRCDEST" ]; then
 		SRCDEST="$TOPDIR"
 	fi
+
+	TARGET="$PKGDEST/${name}#${version}+${release}.kagami"
 
 	if [ "$FORCE" = "yes" ]; then
 		rm -rf "$TARGET"
