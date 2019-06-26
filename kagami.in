@@ -3,8 +3,8 @@
 # Small and simple packages manager for Ataraxia Linux
 #
 
-#umask 022
-#unalias -a
+umask 022
+unalias -a
 
 pushd () { command pushd "$@" > /dev/null; }
 popd () { command popd "$@" > /dev/null; }
@@ -190,6 +190,55 @@ run_strip() {
 	done
 }
 
+parse_options() {
+	for myopts in ${options[@]} ${OPTIONS[@]}; do
+		case $myopts in
+			~emptydirs)
+				OPT_EMPTYDIRS=0
+				;;
+			emptydirs)
+				OPT_EMPTYDIRS=1
+				;;
+			~strip)
+				OPT_STRIP=0
+				;;
+			strip)
+				OPT_STRIP=1
+				;;
+			~makeflags)
+				OPT_MAKEFLAGS=0
+				;;
+			makeflags)
+				OPT_MAKEFLAGS=1
+				;;
+			~locales)
+				OPT_LOCALES=0
+				;;
+			locales)
+				OPT_LOCALES=1
+				;;
+			~docs)
+				OPT_DOCS=0
+				;;
+			docs)
+				OPT_DOCS=1
+				;;
+			~bootstrap)
+				OPT_BOOTSTRAP=0
+				;;
+			bootstrap)
+				OPT_BOOTSTRAP=1
+				;;
+			~ccache)
+				OPT_CCACHE=0
+				;;
+			ccache)
+				OPT_CCACHE=1
+				;;
+		esac
+	done
+}
+
 compile_package() {
 	local FILE DIR TARGET BUILD_SUCCEED
 
@@ -202,52 +251,28 @@ compile_package() {
 	find . -perm 754 -exec chmod 755 {} \;
 	find . -perm 664 -exec chmod 644 {} \;
 
-	if [ "$NOOPTIONS" != "yes" ]; then
-		local myopts
-
-		for myopts in ${OPTIONS[@]} ${options[@]}; do
-			case $myopts in
-				~emptydirs)
-					OPT_EMPTYDIRS=0
-					;;
-				emptydirs)
-					OPT_EMPTYDIRS=1
-					;;
-				~strip)
-					OPT_STRIP=0
-					;;
-				strip)
-					OPT_STRIP=1
-					;;
-				~makeflags)
-					OPT_MAKEFLAGS=0
-					;;
-				makeflags)
-					OPT_MAKEFLAGS=1
-					;;
-				~locales)
-					OPT_LOCALES=0
-					;;
-				locales)
-					OPT_LOCALES=1
-					;;
-				~docs)
-					OPT_DOCS=0
-					;;
-				docs)
-					OPT_DOCS=1
-					;;
-			esac
-		done
-	else
-		warntwo "Don't using options"
-	fi
-
 	if [ "$OPT_MAKEFLAGS" != "0" ]; then
 		export MAKEFLAGS="$MKOPTS"
 		export NINJA_OPTIONS="$MKOPTS"
 	else
 		unset MAKEFLAGS NINJA_OPTIONS MKOPTS
+	fi
+
+	if [ "$USE_BOOTSTRAP" != "yes" ]; then
+		if [ "$OPT_CCACHE" != "0" ]; then
+			if type ccache > /dev/null 2>&1; then
+				if [ -z "$CC" ]; then
+					CC="ccache gcc"
+				else
+					CC="ccache $CC"
+				fi
+				if [ -z "$CXX" ]; then
+					CXX="ccache g++"
+				else
+					CXX="ccache $CXX"
+				fi
+			fi
+		fi
 	fi
 
 	if type build > /dev/null 2>&1; then
@@ -370,8 +395,14 @@ build_package() {
 		rm -rf "$WORK"
 		mkdir -p "$PKG" "$SRC"
 
+		parse_options
+
 		if [ "$USEBOOTSTRAP" = "yes" ]; then
-			dietwo "This package couldn't be built in the cross environment"
+			if [ -z "$OPT_BOOTSTRAP" ]; then
+				dietwo "This package couldn't be built in the cross environment"
+			elif [ "$OPT_BOOTSTRAP" = "0" ]; then
+				dietwo "This package couldn't be built in the cross environment"
+			fi
 		fi
 
 		if [ "$NODOWNLOAD" != "yes" ]; then
@@ -712,7 +743,6 @@ usage() {
 		"   -w		Recompile everything" \
 		"" \
 		"Options for building packages:" \
-		"   -o		Don't use package options" \
 		"   -C		Don't perform cleanup" \
 		"   -D		Don't download source" \
 		"   -x		Don't extract sources" \
@@ -730,12 +760,11 @@ export TOPDIR="$PWD"
 
 CONFIG="/etc/kagami.conf"
 ROOTDIR=''
-OPTIONS=('emptydirs' 'strip' 'makeflags' 'locales' 'docs')
+OPTIONS=('emptydirs' 'strip' 'makeflags' 'locales' 'docs' 'ccache')
 DATABASE="/var/lib/kagami"
 PACKAGES="$DATABASE/pkgs"
 SCRIPTS="$DATABASE/scripts"
 REPOS=('/var/cache/ports/packages')
-NOOPTIONS="no"
 NOCLEAN="no"
 NODOWNLOAD="no"
 NOUNPACK="no"
@@ -750,7 +779,7 @@ NOHOOKS="no"
 USEBOOTSTRAP="no"
 FORCE="no"
 
-while getopts :IBERoCDxbpnXdfsHWawFc:r:vh options; do
+while getopts :IBERCDxbpnXdfsHWawFc:r:vh options; do
 	case $options in
 		I)
 			kagami_mode=install_package
@@ -783,9 +812,6 @@ while getopts :IBERoCDxbpnXdfsHWawFc:r:vh options; do
 			;;
 		r)
 			ROOTDIR="$OPTARG"
-			;;
-		o)
-			NOOPTIONS="yes"
 			;;
 		C)
 			NOCLEAN="yes"
