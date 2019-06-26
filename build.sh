@@ -1,8 +1,6 @@
 #!/bin/sh
 
-VERSION=20190622
-
-set -e
+VERSION=20190626
 
 die() {
 	echo -e "ERROR: $@"
@@ -35,7 +33,7 @@ install_src() {
 DESTDIR=
 PREFIX=/usr/local
 
-while getopts :IBPD: options; do
+while getopts :IBP:D: options; do
 	case $options in
 		B)
 			mode=build
