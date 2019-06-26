@@ -625,6 +625,10 @@ emerge_package() {
 		die "You haven't specified repositories"
 	fi
 
+	if [ -z "$pkg" ]; then
+		die "Your package was not specified"
+	fi
+
 	pushd "$(find_portdir $pkg)"
 		export TOPDIR="$PWD"
 		source_recipe
