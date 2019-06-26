@@ -193,7 +193,7 @@ run_strip() {
 }
 
 compile_package() {
-	local FILE DIR TARGET
+	local FILE DIR TARGET BUILD_SUCCEED
 
 	cd "$SRC"
 
@@ -254,9 +254,15 @@ compile_package() {
 
 	if type build > /dev/null 2>&1; then
 		msgtwo "Compiling package"
-		set -e
-		build
-		set +e
+		(set -e; build)
+	fi
+
+	if [ $? = 0 ]; then
+		BUILD_SUCCEED="yes"
+	fi
+
+	if [ "$BUILD_SUCCEED" != "yes" ]; then
+		dietwo "Failed to compile package"
 	fi
 
 	cd "$PKG"
