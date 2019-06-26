@@ -349,7 +349,6 @@ create_package() {
 
 build_package() {
 	source_recipe
-	msg "Building package: '${name}'"
 
 	if [ -z "$PKGDEST" ]; then
 		PKGDEST="$TOPDIR"
@@ -363,6 +362,7 @@ build_package() {
 	fi
 
 	if [ ! -f "$TARGET" ]; then
+		msg "Building package: '${name}'"
 		WORK="$PWD/work"
 		PKG="$WORK/pkg"
 		SRC="$WORK/src"
