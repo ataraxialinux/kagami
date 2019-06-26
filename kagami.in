@@ -3,8 +3,8 @@
 # Small and simple packages manager for Ataraxia Linux
 #
 
-umask 022
-unalias -a
+#umask 022
+#unalias -a
 
 pushd () { command pushd "$@" > /dev/null; }
 popd () { command popd "$@" > /dev/null; }
@@ -254,13 +254,9 @@ compile_package() {
 
 	if type build > /dev/null 2>&1; then
 		msgtwo "Compiling package"
-		(
-			set -e
-			build
-		)
-		if [ ! $? -eq 0 ]; then
-			die "Failed to compile package"
-		fi
+		set -e
+		build
+		set +e
 	fi
 
 	cd "$PKG"
