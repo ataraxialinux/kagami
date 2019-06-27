@@ -419,9 +419,11 @@ build_package() {
 
 		if [ "$NOPACKAGE" != "yes" ]; then
 			create_package
-		fi
 
-		if [ "$NOPACKAGE" != "yes" ]; then
+			if [ "$NOCLEAN" != "yes" ]; then
+				rm -rf "$WORK"
+			fi
+		else
 			if [ "$NOCLEAN" != "yes" ]; then
 				rm -rf "$WORK"
 			fi
