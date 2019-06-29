@@ -493,6 +493,9 @@ run_scripts() {
 install_package() {
 	local pkg apkg bpkg cpkg dpkg TMPDIR UPDATE HAS_FILES HAS_BACKUP HAS_INSTALL RUN_SUBSTRACT SAVEROOTDIR
 	SAVEROOTDIR="${ROOTDIR}/"
+	HAS_FILES=1
+	HAS_BACKUP=1
+	HAS_INSTALL=1
 
 	if [ -n "$TARGET" ]; then
 		pkg="$TARGET"
@@ -532,21 +535,10 @@ install_package() {
 
 	msgtwo "Checking package file"
 	bsdtar -C "$TMPDIR" -xf "$pkg" data/METADATA 2>/dev/null || die "Can't extract package archive. Check if archive is broken"
-
-	bsdtar -C "$TMPDIR" -xf "$pkg" data/CONTENTS 2>/dev/null
-	if [ $? -eq 0 ]; then
-		HAS_FILES=1
-	fi
-
-	bsdtar -C "$TMPDIR" -xf "$pkg" data/BACKUP 2>/dev/null
-	if [ $? -eq 0 ]; then
-		HAS_BACKUP=1
-	fi
-
-	bsdtar -C "$TMPDIR" -xf "$pkg" data/INSTALL 2>/dev/null
-	if [ $? -eq 0 ]; then
-		HAS_INSTALL=1
-	fi
+	bsdtar -tf $pkg data/CONTENTS &>/dev/null || HAS_FILES=0
+	bsdtar -tf $pkg data/BACKUP &>/dev/null || HAS_BACKUP=0
+	bsdtar -tf $pkg data/INSTALL &>/dev/null || HAS_INSTALL=0
+	bsdtar -C "$TMPDIR" -xf "$pkg" 2>/dev/null
 
 	mkdir -p "$ROOTDIR/$PACKAGES/$dpkg" "$ROOTDIR/$SCRIPTS"
 	cp "$TMPDIR/data/METADATA" "$ROOTDIR/$PACKAGES/$dpkg/METADATA"
@@ -705,7 +697,9 @@ emerge_package() {
 		build_package
 
 		if [ "$NOPACKAGE" != "yes" ]; then
-			install_package
+			(
+				install_package
+			)
 		fi
 	popd
 }
