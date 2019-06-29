@@ -806,6 +806,9 @@ while getopts :IBERCDxbpnXdfsHWawFc:r:vh options; do
 			if [ "$kagami_mode" = "emerge_package" ]; then
 				NEEDED="no"
 				FORCE="yes"
+				if [ -d "$ROOTDIR/$PACKAGES/" ]; then
+					die "You don't have package database"
+				fi
 				for a in $("$ROOTDIR/$PACKAGES/" ); do
 					emerge_package $a
 				done
