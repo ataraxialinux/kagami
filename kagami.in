@@ -29,7 +29,6 @@ die() {
 		fi
 
 		rm -rf "$TMPDIR"
-		unset NAME VERSION RELEASE
 	fi
 
 	exit 1
@@ -51,7 +50,6 @@ dietwo() {
 		fi
 
 		rm -rf "$TMPDIR"
-		unset NAME VERSION RELEASE
 	fi
 
 	exit 1
@@ -241,6 +239,7 @@ parse_options() {
 
 compile_package() {
 	local FILE DIR TARGET BUILD_SUCCEED
+	BUILD_SUCCEED="no"
 
 	cd "$SRC"
 
@@ -654,8 +653,8 @@ find_portdir() {
 }
 
 emerge_package() {
-	local pkg mapkg mbpkg mcpkg mdpkg
-	pkg="$1"
+	local pkg="$1"
+	local BUILD_SUCCEED="no"
 
 	if [ -z "$REPOS" ]; then
 		die "You haven't specified repositories"
@@ -684,8 +683,17 @@ emerge_package() {
 				for mydepends in $depends; do
 					if [ ! -d "$ROOTDIR/$PACKAGES/$mydepends" ]; then
 						(
+							set -e
 							emerge_package $mydepends
 						)
+
+						if [ $? = 0 ]; then
+							BUILD_SUCCEED="yes"
+						fi
+
+						if [ "$BUILD_SUCCEED" != "yes" ]; then
+								dietwo "Failed to emerge dependencies"
+						fi
 					fi
 				done
 			fi
