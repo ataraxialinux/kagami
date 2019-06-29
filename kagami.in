@@ -648,6 +648,8 @@ find_portdir() {
 	for myrepos in ${REPOS[@]}; do
 		if [ -d "$myrepos/$pkg" ]; then
 			echo "$myrepos/$pkg"
+		else
+			die "Your package doesn't exist"
 		fi
 	done
 }
