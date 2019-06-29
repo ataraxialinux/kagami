@@ -761,7 +761,7 @@ export VERSION="@VERSION@"
 export TOPDIR="$PWD"
 
 CONFIG="/etc/kagami.conf"
-ROOTDIR=''
+ROOTDIR="/"
 OPTIONS=('emptydirs' 'strip' 'makeflags' 'locales' 'docs' 'ccache')
 DATABASE="/var/lib/kagami"
 PACKAGES="$DATABASE/pkgs"
@@ -877,7 +877,7 @@ check_for_root
 source_config
 
 if [ "$kagami_mode" = "install_package" ] || [ "$kagami_mode" = "emerge_package" ] || [ "$kagami_mode" = "remove_package" ]; then
-	if [ -n "$ROOTDIR" ]; then
+	if [ "$ROOTDIR" != "/" ]; then
 		ROOTDIR="$(realpath $ROOTDIR)"
 		ROOTDIR="${ROOTDIR%/}"
 	fi
