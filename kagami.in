@@ -697,9 +697,7 @@ emerge_package() {
 		build_package
 
 		if [ "$NOPACKAGE" != "yes" ]; then
-			(
 				install_package
-			)
 		fi
 	popd
 }
