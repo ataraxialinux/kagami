@@ -492,7 +492,8 @@ run_scripts() {
 }
 
 install_package() {
-	local pkg apkg bpkg cpkg dpkg TMPDIR UPDATE HAS_FILES HAS_BACKUP HAS_INSTALL RUN_SUBSTRACT
+	local pkg apkg bpkg cpkg dpkg TMPDIR UPDATE HAS_FILES HAS_BACKUP HAS_INSTALL RUN_SUBSTRACT SAVEROOTDIR
+	SAVEROOTDIR="${ROOTDIR}/"
 
 	if [ -n "$TARGET" ]; then
 		pkg="$TARGET"
@@ -586,7 +587,7 @@ install_package() {
 	fi
 
 	msgtwo "Installing package contents"
-	bsdtar -xf "$pkg" -C "$ROOTDIR"  2>/dev/null || dietwo "Failed to install package contents"
+	bsdtar -xf "$pkg" -C "$SAVEROOTDIR"  2>/dev/null || dietwo "Failed to install package contents"
 	rm -rf "$ROOTDIR/data"
 
 	if [ "$RUN_SUBSTRACT" = "1" ]; then
@@ -877,7 +878,7 @@ check_for_root
 source_config
 
 if [ "$kagami_mode" = "install_package" ] || [ "$kagami_mode" = "emerge_package" ] || [ "$kagami_mode" = "remove_package" ]; then
-	if [ "$ROOTDIR" != "/" ]; then
+	if [ -n "$ROOTDIR" ]; then
 		ROOTDIR="$(realpath $ROOTDIR)"
 		ROOTDIR="${ROOTDIR%/}"
 	fi

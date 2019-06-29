@@ -1,6 +1,6 @@
 #!/bin/sh
 
-VERSION=20190626
+VERSION="$(git tag | tail -1)"
 
 die() {
 	echo -e "ERROR: $@"
