@@ -483,9 +483,9 @@ run_scripts() {
 	local myopt=$1
 
 	if [ "$NOSCRIPTS" != "yes" ]; then
-		if [ -x "$ROOTDIR/$SCIPTS/$dpkg" ]; then
+		if [ -x "$ROOTDIR/$SCRIPTS/$dpkg" ]; then
 			msgtwo "Running $myopt scripts"
-			chroot "$ROOTDIR" $SCIPTS/$dpkg $myopt
+			chroot "$ROOTDIR" $SCRIPTS/$dpkg $myopt
 		fi
 	fi
 }
