@@ -481,18 +481,19 @@ backup_restore() {
 
 run_scripts() {
 	local myopt=$1
+	local SAVEROOTDIR="${ROOTDIR}/"
 
 	if [ "$NOSCRIPTS" != "yes" ]; then
 		if [ -x "$ROOTDIR/$SCRIPTS/$dpkg" ]; then
 			msgtwo "Running $myopt scripts"
-			chroot "$ROOTDIR" $SCRIPTS/$dpkg $myopt
+			chroot "$SAVEROOTDIR" $SCRIPTS/$dpkg $myopt
 		fi
 	fi
 }
 
 install_package() {
-	local pkg apkg bpkg cpkg dpkg TMPDIR UPDATE HAS_FILES HAS_BACKUP HAS_INSTALL RUN_SUBSTRACT SAVEROOTDIR
-	SAVEROOTDIR="${ROOTDIR}/"
+	local pkg apkg bpkg cpkg dpkg TMPDIR UPDATE HAS_FILES HAS_BACKUP HAS_INSTALL RUN_SUBSTRACT
+	local SAVEROOTDIR="${ROOTDIR}/"
 	HAS_FILES=1
 	HAS_BACKUP=1
 	HAS_INSTALL=1
