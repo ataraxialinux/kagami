@@ -32,6 +32,15 @@ dietwo() {
 
 	exit 1
 }
+diethree() {
+	echo -e "\033[1;31m * \033[0m$@"
+
+	if [ "$NOCLEAN" != "yes" ]; then
+		rm -rf "$WORK"
+	fi
+
+	rm -rf "$TMPDIR"
+}
 
 check_for_root() {
 	if [[ $EUID -ne 0 ]]; then
@@ -265,6 +274,7 @@ backup() {
 	if [ "$INST" = "yes" ]; then
 		backupfile="$TMPDIR/data/BACKUP"
 	else
+		pkg="$2"
 		backupfile="$ROOTDIR/$PACKAGES/$pkg/BACKUP"
 	fi
 
@@ -282,7 +292,9 @@ backup() {
 				msgtwo "Restoring files"
 				for mybackup in $(cat "$backupfile"); do
 					if [ -f "$ROOTDIR/$mybackup.bak" ]; then
-						mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.new" || dietwo "Failed to save new file: '${mybackup}'"
+						if [ -f "$ROOTDIR/$mybackup" ]; then
+							mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.new" || dietwo "Failed to save new file: '${mybackup}'"
+						fi
 						mv "$ROOTDIR/$mybackup.bak" "$ROOTDIR/$mybackup" || dietwo "Failed to restore file: '${mybackup}'"
 					fi
 				done
@@ -297,7 +309,8 @@ run_scripts() {
 	if [ "$INST" = "yes" ]; then
 		scriptfile="$TMPDIR/data/INSTALL"
 	else
-		scriptfile="$ROOTDIR/$SCRIPTS/$dpkg"
+		pkg="$2"
+		scriptfile="$ROOTDIR/$SCRIPTS/$pkg"
 	fi
 
 	if [ "$NOSCRIPTS" != "yes" ]; then
@@ -556,6 +569,19 @@ install_package() {
 		dietwo "Your package is not kagami package"
 	fi
 
+	if [ "$FORCE" != "yes" ]; then
+		msgtwo "Checking for file conflicts"
+		if [ ! -f "$ROOTDIR/$PACKAGES/$dpkg/METADATA" ]; then
+			for fileconflicts in $(bsdtar -tf "$pkg" | sed -e 's,\./,,g'); do
+				echo "$fileconflicts" >> /tmp/conflicts
+			done
+			diethree "Following files couldn't be overwritten"
+			cat /tmp/conflicts
+			rm -rf /tmp/conflicts
+			exit 1
+		fi
+	fi
+
 	HAS_CONTENTS=0
 	HAS_BACKUP=0
 	HAS_INSTALL=0
@@ -583,7 +609,7 @@ install_package() {
 	fi
 
 	msgtwo "Extracting package"
-	bsdtar -xf "$pkg" -C "$SAVEROOTDIR"  &>/dev/null || dietwo "Failed to install package contents"
+	bsdtar -C "$SAVEROOTDIR" -xf "$pkg"  &>/dev/null || dietwo "Failed to install package contents"
 	rm -rf "$ROOTDIR/data"
 
 	if [ "$UPDATE" = "1" ]; then
@@ -626,6 +652,41 @@ install_package() {
 	msg "Package was successfully installed"
 }
 
+remove_package() {
+	INST="0"
+
+	local dirlist nondir
+	pkg="$1"
+
+	if [ -z "$pkg" ]; then
+		die "Your package was not specified"
+	fi
+
+	if [ ! -d "$ROOTDIR/$PACKAGES/$pkg" ]; then
+		die "Your package is not installed"
+	fi
+
+	msg "Removing package: '${pkg}'"
+
+	run_scripts pre-remove $pkg
+
+	backup save $pkg
+
+	msgtwo "Removing files"
+	dirlist=`grep '/$' "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"`
+	nondir=`grep -v '/$' "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"`
+	list_uninstall "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"
+
+	backup restore $pkg
+
+	run_scripts post-remove $pkg
+
+	msgtwo "Removing package's information"
+	rm -rf "$ROOTDIR/$PACKAGES/$pkg" "$ROOTDIR/$SCRIPTS/$pkg"
+
+	msg "Package was successfully removed"
+}
+
 version() {
 	printf "%s\n" \
 		"kagami version $VERSION" \
@@ -652,6 +713,7 @@ usage() {
 		"   -Q		Show information about packages/ports" \
 		"   -c <FILE>	Specify configuration file for kagami" \
 		"   -r <DIR>	Specify directory for installing packages" \
+		"   -F		Do force installation/build" \
 		"   -v		Show version of kagami" \
 		"   -h		Show usage information" \
 		"" \
@@ -662,7 +724,6 @@ usage() {
 		"   -f		Don't check for conflicts" \
 		"   -s		Don't run scripts" \
 		"   -H		Don't run hooks/triggers" \
-		"   -F		Force installation or removal" \
 		"" \
 		"Options for 'emerge' mode:" \
 		"   -a		Run system upgrade" \
@@ -674,6 +735,7 @@ usage() {
 		"   -x		Don't extract sources" \
 		"   -b		Don't build package" \
 		"   -p		Don't create package" \
+		"   -V		Show output" \
 		"" \
 		"Options for 'query' mode:" \
 		"   -l		List installed packages" \
