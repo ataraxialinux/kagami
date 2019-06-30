@@ -692,6 +692,7 @@ emerge_package() {
 		fi
 
 		(
+			set -e
 			source_recipe
 			build_package
 
@@ -699,6 +700,14 @@ emerge_package() {
 					install_package
 			fi
 		)
+
+		if [ $? = 0 ]; then
+			BUILD_SUCCEED="yes"
+		fi
+
+		if [ "$BUILD_SUCCEED" != "yes" ]; then
+			dietwo "Failed to emerge package"
+		fi
 	popd
 }
 
