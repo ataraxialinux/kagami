@@ -39,7 +39,11 @@ diethree() {
 		rm -rf "$WORK"
 	fi
 
+	cat /tmp/conflicts
+	rm -rf /tmp/conflicts
 	rm -rf "$TMPDIR"
+
+	exit 1
 }
 
 check_for_root() {
@@ -517,8 +521,7 @@ build_package() {
 			fi
 		fi
 	else
-		msg "This package was already built"
-		exit 0
+		warn "This package was already built"
 	fi
 }
 
@@ -573,12 +576,13 @@ install_package() {
 		msgtwo "Checking for file conflicts"
 		if [ ! -f "$ROOTDIR/$PACKAGES/$dpkg/METADATA" ]; then
 			for fileconflicts in $(bsdtar -tf "$pkg" | sed -e 's,\./,,g'); do
-				echo "$fileconflicts" >> /tmp/conflicts
+				if [ -f "$ROOTDIR/$fileconflicts" ]; then
+					echo "$fileconflicts" >> /tmp/conflicts
+				fi
 			done
-			diethree "Following files couldn't be overwritten"
-			cat /tmp/conflicts
-			rm -rf /tmp/conflicts
-			exit 1
+			if [ -f "/tmp/conflicts" ]; then
+				diethree "Following files couldn't be overwritten"
+			fi
 		fi
 	fi
 
@@ -685,6 +689,56 @@ remove_package() {
 	rm -rf "$ROOTDIR/$PACKAGES/$pkg" "$ROOTDIR/$SCRIPTS/$pkg"
 
 	msg "Package was successfully removed"
+}
+
+emerge_package() {
+	pkg="$1"
+
+	if [ -z "$REPOS" ]; then
+		die "You haven't specified repositories"
+	fi
+
+	if [ -z "$pkg" ]; then
+		die "Your package was not specified"
+	fi
+
+	pushd "$(find_portdir $pkg)"
+		export TOPDIR="$PWD"
+		source_recipe
+
+		if [ "$NOCONFLICTS" != "yes" ]; then
+			if [ -n "$conflicts" ]; then
+				for myconflicts in ${conflicts[@]}; do
+					if [ -d "$ROOTDIR/$PACKAGES/$myconflicts" ]; then
+						die "Your package is conflicting with $myconflicts"
+					fi
+				done
+			fi
+		fi
+
+		if [ "$NODEPENDS" != "yes" ]; then
+			if [ -n "$depends" ]; then
+				for mydepends in $depends; do
+					if [ ! -d "$ROOTDIR/$PACKAGES/$mydepends" ]; then
+						(
+							set -e
+							emerge_package $mydepends
+						)
+						if [ $? -eq 1 ]; then
+							dietwo "Failed to install dependencies"
+						fi
+					fi
+				done
+			fi
+		fi
+
+		source_recipe
+		build_package
+		if [ "$NOPACKAGE" != "yes" ]; then
+				install_package
+		fi
+
+	popd
 }
 
 version() {
