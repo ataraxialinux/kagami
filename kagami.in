@@ -520,7 +520,7 @@ install_package() {
 		if [ "$NEEDED" != "yes" ]; then
 			UPDATE=1
 		else
-			warnt "This package has been already installed"
+			warn "$dpkg: This package has been already installed"
 			exit 0
 		fi
 	else
@@ -691,12 +691,14 @@ emerge_package() {
 			fi
 		fi
 
-		source_recipe
-		build_package
+		(
+			source_recipe
+			build_package
 
-		if [ "$NOPACKAGE" != "yes" ]; then
-				install_package
-		fi
+			if [ "$NOPACKAGE" != "yes" ]; then
+					install_package
+			fi
+		)
 	popd
 }
 
