@@ -3,9 +3,6 @@
 # Small and simple packages manager for Ataraxia Linux
 #
 
-umask 022
-unalias -a
-
 pushd () { command pushd "$@" > /dev/null; }
 popd () { command popd "$@" > /dev/null; }
 msg() { echo -e "\033[1;32m >>> \033[0m$@"; }
@@ -16,41 +13,22 @@ warntwo() { echo -e "\033[1;33m * \033[0m$@"; }
 die() {
 	echo -e "\033[1;31m >>> \033[0m$@"
 
-	if [ "$kagami_mode" = "build_package" ]; then
-		if [ "$NOCLEAN" != "yes" ]; then
-			rm -rf "$WORK"
-		fi
-	elif [ "$kagami_mode" = "install_package" ]; then
-		rm -rf "$TMPDIR"
-		unset NAME VERSION RELEASE
-	elif [ "$kagami_mode" = "emerge_package" ]; then
-		if [ "$NOCLEAN" != "yes" ]; then
-			rm -rf "$WORK"
-		fi
-
-		rm -rf "$TMPDIR"
+	if [ "$NOCLEAN" != "yes" ]; then
+		rm -rf "$WORK"
 	fi
+
+	rm -rf "$TMPDIR"
 
 	exit 1
 }
-
 dietwo() {
 	echo -e "\033[1;31m * \033[0m$@"
 
-	if [ "$kagami_mode" = "build_package" ]; then
-		if [ "$NOCLEAN" != "yes" ]; then
-			rm -rf "$WORK"
-		fi
-	elif [ "$kagami_mode" = "install_package" ]; then
-		rm -rf "$TMPDIR"
-		unset NAME VERSION RELEASE
-	elif [ "$kagami_mode" = "emerge_package" ]; then
-		if [ "$NOCLEAN" != "yes" ]; then
-			rm -rf "$WORK"
-		fi
-
-		rm -rf "$TMPDIR"
+	if [ "$NOCLEAN" != "yes" ]; then
+		rm -rf "$WORK"
 	fi
+
+	rm -rf "$TMPDIR"
 
 	exit 1
 }
@@ -112,23 +90,49 @@ get_filename() {
 	fi
 }
 
-url_fetch() {
-	[ -f "$1" ] || curl $CURLOPTS -Sq --progress-bar -L "$2" > "$1" || {
-		rm -f "$1"
-		dietwo "Failed to fetch $1"
-	}
-}
-
 download_file() {
-	pushd "$SRCDEST"
-		for s in $1; do
-			if echo "$s" | grep -q -E '^((https|http|ftp|rtsp|mms)?:\/\/).+'; then
-				local target="`basename $s`"
-				msgtwo "Downloading $target"
-				url_fetch "$target" "$s"
+	local url="$1"
+
+	if [ ! "`type -p curl`" ]; then
+		dietwo "curl wasn't found"
+	fi
+
+	msgtwo "Downloading $url"
+
+	LOCAL_FILENAME=`get_filename $url`
+	LOCAL_FILENAME_PARTIAL="$LOCAL_FILENAME.partial"
+	cmd="--progress-bar -L -o $LOCAL_FILENAME_PARTIAL $CURLOPTS"
+	resumecmd="-C -"
+	fullcmd="curl $cmd"
+	RESUME="no"
+
+	if [ -f "$LOCAL_FILENAME_PARTIAL" ]; then
+		warntwo "Partial download found, trying to resume"
+		RESUME="yes"
+		fullcmd="$fullcmd $resumecmd"
+	fi
+
+	error=1
+
+	if [ $error != 0 ]; then
+		while true; do
+			$fullcmd $1
+			error=$?
+			if [ $error != 0 ] && [ "$RESUME" = "yes" ]; then
+				info "Partial download failed, restarting"
+				rm -f "$LOCAL_FILENAME_PARTIAL"
+				RESUME="yes"
+			else
+				break
 			fi
 		done
-	popd
+	fi
+
+	if [ $error != 0 -o ! -f "$LOCAL_FILENAME_PARTIAL" ]; then
+		dietwo "Downloading '${1}' failed."
+	fi
+
+	mv -f "$LOCAL_FILENAME_PARTIAL" "$LOCAL_FILENAME"
 }
 
 download_source() {
@@ -237,19 +241,85 @@ parse_options() {
 	done
 }
 
+list_subtract() {
+	(
+		cat "$1" "$2" | sort | uniq -u
+		cat "$1"
+	) | sort | uniq -d
+}
+
+list_uninstall() {
+	local f p
+	local files=$(sort -r "$1" | sed 's:^:'"${SAVEROOTDIR}"': ; s:/^[^\.]\./::g; s:/\{2,\}:/:g; s:/\./:/:g')
+	if [ -z "$DRYRUN" ] ; then
+		echo "$files" | tr '\n' '\0' | xargs -0 rm 2>/dev/null
+		echo "$files" | tr '\n' '\0' | xargs -0 rmdir 2>/dev/null
+		[ "$2" ] && echo "$files" >> "$2"
+	fi
+	return 0
+}
+
+backup() {
+	local opt="$1"
+
+	if [ "$INST" = "yes" ]; then
+		backupfile="$TMPDIR/data/BACKUP"
+	else
+		backupfile="$ROOTDIR/$PACKAGES/$pkg/BACKUP"
+	fi
+
+	if [ "$NOBACKUP" != "yes" ]; then
+		case $opt in
+			save)
+				msgtwo "Saving files"
+				for mybackup in $(cat "$backupfile"); do
+					if [ -f "$ROOTDIR/$mybackup" ]; then
+						mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.bak" || dietwo "Failed to save file: '${mybackup}'"
+					fi
+				done
+				;;
+			restore)
+				msgtwo "Restoring files"
+				for mybackup in $(cat "$backupfile"); do
+					if [ -f "$ROOTDIR/$mybackup.bak" ]; then
+						mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.new" || dietwo "Failed to save new file: '${mybackup}'"
+						mv "$ROOTDIR/$mybackup.bak" "$ROOTDIR/$mybackup" || dietwo "Failed to restore file: '${mybackup}'"
+					fi
+				done
+				;;
+		esac
+	fi
+}
+
+run_scripts() {
+	local opt="$1"
+
+	if [ "$INST" = "yes" ]; then
+		scriptfile="$TMPDIR/data/INSTALL"
+	else
+		scriptfile="$ROOTDIR/$SCRIPTS/$dpkg"
+	fi
+
+	if [ "$NOSCRIPTS" != "yes" ]; then
+		if [ -x "$scriptfile" ]; then
+			msgtwo "Running $opt script"
+			$scriptfile $opt
+		fi
+	fi
+}
+
+find_portdir() {
+	local pkg
+	pkg="$1"
+
+	for myrepos in ${REPOS[@]}; do
+		if [ -d "$myrepos/$pkg" ]; then
+			echo "$myrepos/$pkg"
+		fi
+	done
+}
+
 compile_package() {
-	local FILE DIR TARGET BUILD_SUCCEED
-	BUILD_SUCCEED="no"
-
-	cd "$SRC"
-
-	msgtwo "Fixing permissions"
-	chown -R root:root .
-	find . -perm 777 -exec chmod 755 {} \;
-	find . -perm 775 -exec chmod 755 {} \;
-	find . -perm 754 -exec chmod 755 {} \;
-	find . -perm 664 -exec chmod 644 {} \;
-
 	if [ "$OPT_MAKEFLAGS" != "0" ]; then
 		export MAKEFLAGS="$MKOPTS"
 		export NINJA_OPTIONS="$MKOPTS"
@@ -276,97 +346,104 @@ compile_package() {
 
 	if type build > /dev/null 2>&1; then
 		msgtwo "Compiling package"
-		(set -e; build)
+		pushd "$SRC"
+			if [ "$VERBOSE" = "yes" ]; then
+				(
+					set -e
+					build
+				)
+			else
+				(
+					set -e
+					build &>/dev/null
+				)
+			fi
+			if [ $? -eq 1 ]; then
+				dietwo "Failed to compile package"
+			fi
+		popd
 	fi
 
-	if [ $? = 0 ]; then
-		BUILD_SUCCEED="yes"
-	fi
+	pushd "$PKG"
+		msgtwo "Removing junk from package"
+		rm -rf {,usr/}{,local/}{,share/}{info} usr{,/local}{,/share},opt/*}/{info}
+		rm -rf {,usr/}{,local/}lib/charset.alias
 
-	if [ "$BUILD_SUCCEED" != "yes" ]; then
-		dietwo "Failed to compile package"
-	fi
+		find . -name "*.la" -print0 | xargs -0 rm -rf
+		find . -name "*.pod" -print0 | xargs -0 rm -rf
+		find . -name ".packlist" -print0 | xargs -0 rm -rf
 
-	cd "$PKG"
-
-	msgtwo "Removing junk from package"
-	rm -rf {,usr/}{,local/}{,share/}{info} usr{,/local}{,/share},opt/*}/{info}
-	rm -rf {,usr/}{,local/}lib/charset.alias
-
-	find . -name "*.la" -print0 | xargs -0 rm -rf
-	find . -name "*.pod" -print0 | xargs -0 rm -rf
-	find . -name ".packlist" -print0 | xargs -0 rm -rf
-
-	if [ "$OPT_EMPTYDIRS" = "0" ]; then
-		msgtwo "Removing empty directories"
-		find . -type d -empty -print0 | xargs -0 rm -rf
-	fi
-
-	if [ "$OPT_LOCALES" = "0" ]; then
-		msgtwo "Removing locales"
-		rm -rf {,usr/}{,local/}{,share/}{locale}
-	fi
-
-	if [ "$OPT_DOCS" = "0" ]; then
-		msgtwo "Removing documentation"
-		rm -rf {,usr/}{,local/}{,share/}{doc} usr/{,local/}{,share/}{doc,gtk-doc} opt/*/{doc,gtk-doc}
-	fi
-
-	msgtwo "Compressing manual pages"
-	find . -type f -path "*/man/man*/*" | while read FILE; do
-		if [ "$FILE" = "${FILE%%.gz}" ]; then
-			pigz -9 "$FILE"
+		if [ "$OPT_EMPTYDIRS" = "0" ]; then
+			msgtwo "Removing empty directories"
+			find . -type d -empty -print0 | xargs -0 rm -rf
 		fi
-	done
 
-	find . -type l -path "*/man/man*/*" | while read FILE; do
-		TARGET=`readlink -n "$FILE"`
-		TARGET="${TARGET##*/}"
-		TARGET="${TARGET%%.gz}.gz"
-		rm -f "$FILE"
-		FILE="${FILE%%.gz}.gz"
-		DIR=`dirname "$FILE"`
-
-		if [ -e "$DIR/$TARGET" ]; then
-			ln -sf "$TARGET" "$FILE"
+		if [ "$OPT_LOCALES" = "0" ]; then
+			msgtwo "Removing locales"
+			rm -rf {,usr/}{,local/}{,share/}{locale}
 		fi
-	done
 
-	if [ "$OPT_STRIP" != "0" ]; then
-		msgtwo "Removing debug information from binary files"
-		run_strip "$PKG"
-	fi
+		if [ "$OPT_DOCS" = "0" ]; then
+			msgtwo "Removing documentation"
+			rm -rf {,usr/}{,local/}{,share/}{doc} usr/{,local/}{,share/}{doc,gtk-doc} opt/*/{doc,gtk-doc}
+		fi
+
+		msgtwo "Compressing manual pages"
+		find . -type f -path "*/man/man*/*" | while read FILE; do
+			if [ "$FILE" = "${FILE%%.gz}" ]; then
+				pigz -9 "$FILE"
+			fi
+		done
+
+		find . -type l -path "*/man/man*/*" | while read FILE; do
+			TARGET=`readlink -n "$FILE"`
+			TARGET="${TARGET##*/}"
+			TARGET="${TARGET%%.gz}.gz"
+			rm -f "$FILE"
+			FILE="${FILE%%.gz}.gz"
+			DIR=`dirname "$FILE"`
+
+			if [ -e "$DIR/$TARGET" ]; then
+				ln -sf "$TARGET" "$FILE"
+			fi
+		done
+
+		if [ "$OPT_STRIP" != "0" ]; then
+			msgtwo "Removing debug information from binary files"
+			run_strip "$PKG"
+		fi
+	popd
 }
 
 create_package() {
-	msgtwo "Generating package metadata"
-	cd "$PKG"
+	pushd "$PKG"
+		msgtwo "Generating package metadata"
+		find $(ls) >> CONTENTS
 
-	find $(ls) >> CONTENTS
+		mkdir data
+		mv CONTENTS data/CONTENTS
 
-	mkdir data
-	mv CONTENTS data/CONTENTS
+		echo "NAME=${name}" >> data/METADATA
+		echo "VERSION=${version}" >> data/METADATA
+		echo "RELEASE=${release}" >> data/METADATA
 
-	echo "NAME=${name}" >> data/METADATA
-	echo "VERSION=${version}" >> data/METADATA
-	echo "RELEASE=${release}" >> data/METADATA
+		if [ -n "$backup" ]; then
+			local mybackup
+			for mybackup in ${backup[@]}; do
+				echo "$mybackup" >> data/BACKUP
+			done
+		fi
 
-	if [ -n "$backup" ]; then
-		local mybackup
-		for mybackup in ${backup[@]}; do
-			echo "$mybackup" >> data/BACKUP
-		done
-	fi
+		if [ -f "$TOPDIR/INSTALL" ]; then
+			cp "$TOPDIR/INSTALL" data/INSTALL
+			chmod +x data/INSTALL
+		fi
 
-	if [ -f "$TOPDIR/INSTALL" ]; then
-		cp "$TOPDIR/INSTALL" data/INSTALL
-		chmod +x data/INSTALL
-	fi
+		msgtwo "Creating package archive"
+		bsdtar -c --zstd -f "$TARGET" .
 
-	msgtwo "Creating package archive"
-	bsdtar -c --zstd -f "$TARGET" .
-
-	msg "Package have been successfully built"
+		msg "Package have been successfully built"
+	popd
 }
 
 build_package() {
@@ -418,7 +495,6 @@ build_package() {
 
 		if [ "$NOPACKAGE" != "yes" ]; then
 			create_package
-
 			if [ "$NOCLEAN" != "yes" ]; then
 				rm -rf "$WORK"
 			fi
@@ -427,84 +503,22 @@ build_package() {
 				rm -rf "$WORK"
 			fi
 		fi
-	fi
-}
-
-# from old apk-tools
-list_subtract() {
-	(
-		cat "$1" "$2" | sort | uniq -u
-		cat "$1"
-	) | sort | uniq -d
-}
-
-# this stuff too
-list_uninstall() {
-	local SAVEROOTDIR="${ROOTDIR}/"
-	local f p
-	local files=$(sort -r "$1" | sed 's:^:'"${SAVEROOTDIR}"': ; s:/^[^\.]\./::g; s:/\{2,\}:/:g; s:/\./:/:g')
-	if [ -z "$DRYRUN" ] ; then
-		echo "$files" | tr '\n' '\0' | xargs -0 rm 2>/dev/null
-		echo "$files" | tr '\n' '\0' | xargs -0 rmdir 2>/dev/null
-		[ "$2" ] && echo "$files" >> "$2"
-	fi
-	return 0
-}
-
-backup_save() {
-	if [ "$NOBACKUP" != "yes" ]; then
-		if [ -f "$TMPDIR/data/BACKUP" ]; then
-			msgtwo "Saving required files"
-			local mybackup
-			for mybackup in $(cat "$TMPDIR/data/BACKUP"); do
-				if [ -f "$ROOTDIR/$mybackup" ]; then
-					mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.bak" || dietwo "Failed to save $mybackup"
-				fi
-			done
-		fi
-	fi
-}
-
-backup_restore() {
-	if [ "$NOBACKUP" != "yes" ]; then
-		if [ -f "$TMPDIR/data/BACKUP" ]; then
-			msgtwo "Restoring required files"
-			local mybackup
-			for mybackup in $(cat "$TMPDIR/data/BACKUP"); do
-				if [ -f "$ROOTDIR/$mybackup.bak" ]; then
-					mv "$ROOTDIR/$mybackup.bak" "$ROOTDIR/$mybackup" || dietwo "Failed to restore $mybackup"
-				fi
-			done
-		fi
-	fi
-}
-
-run_scripts() {
-	local myopt=$1
-	local SAVEROOTDIR="${ROOTDIR}/"
-
-	if [ "$NOSCRIPTS" != "yes" ]; then
-		if [ -x "$ROOTDIR/$SCRIPTS/$dpkg" ]; then
-			msgtwo "Running $myopt scripts"
-			chroot "$SAVEROOTDIR" $SCRIPTS/$dpkg $myopt
-		fi
+	else
+		msg "This package was already built"
+		exit 0
 	fi
 }
 
 install_package() {
-	local pkg apkg bpkg cpkg dpkg TMPDIR UPDATE HAS_FILES HAS_BACKUP HAS_INSTALL RUN_SUBSTRACT
-	local SAVEROOTDIR="${ROOTDIR}/"
-	HAS_FILES=1
-	HAS_BACKUP=1
-	HAS_INSTALL=1
+	INST="yes"
+
+	local apkg bpkg cpkg dpkg
 
 	if [ -n "$TARGET" ]; then
 		pkg="$TARGET"
 	else
 		pkg="$1"
 	fi
-
-	unset NAME VERSION RELEASE
 
 	if [ ! -f "$pkg" ]; then
 		die "Your package file was not found or not specified"
@@ -517,7 +531,8 @@ install_package() {
 	cpkg="${bpkg%+*}"
 	dpkg="${cpkg%#*}"
 
-	if [ -d "$ROOTDIR/$PACKAGES/$dpkg" ]; then
+	UPDATE=0
+	if [ -f "$ROOTDIR/$PACKAGES/$dpkg/METADATA" ]; then
 		if [ "$NEEDED" != "yes" ]; then
 			UPDATE=1
 		else
@@ -534,36 +549,25 @@ install_package() {
 		msg "Installing package: '${dpkg}'"
 	fi
 
-	msgtwo "Checking package file"
-	bsdtar -C "$TMPDIR" -xf "$pkg" data/METADATA 2>/dev/null || die "Can't extract package archive. Check if archive is broken"
-	bsdtar -tf $pkg data/CONTENTS &>/dev/null || HAS_FILES=0
-	bsdtar -tf $pkg data/BACKUP &>/dev/null || HAS_BACKUP=0
-	bsdtar -tf $pkg data/INSTALL &>/dev/null || HAS_INSTALL=0
-	bsdtar -C "$TMPDIR" -xf "$pkg" 2>/dev/null
+	msgtwo "Checking package"
+	bsdtar -C "$TMPDIR" -xf "$pkg" &>/dev/null || dietwo "Can't extract package archive. Check if archive is broken"
 
-	mkdir -p "$ROOTDIR/$PACKAGES/$dpkg" "$ROOTDIR/$SCRIPTS"
-	cp "$TMPDIR/data/METADATA" "$ROOTDIR/$PACKAGES/$dpkg/METADATA"
-
-	if [ "$HAS_FILES" = "1" ]; then
-		if [ "$UPDATE" = "1" ]; then
-			if [ -f "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS" ]; then
-				mv "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS" "$TMPDIR/data/CONTENTS.old"
-				cp "$TMPDIR/data/CONTENTS" "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS"
-				RUN_SUBSTRACT=1
-			else
-				cp "$TMPDIR/data/CONTENTS" "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS"
-			fi
-		else
-			cp "$TMPDIR/data/CONTENTS" "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS"
-		fi
+	if [ ! -f "$TMPDIR/data/METADATA" ]; then
+		dietwo "Your package is not kagami package"
 	fi
 
-	if [ "$HAS_BACKUP" = "1" ]; then
-		cp "$TMPDIR/data/BACKUP" "$ROOTDIR/$PACKAGES/$dpkg/BACKUP"
-	fi
+	HAS_CONTENTS=0
+	HAS_BACKUP=0
+	HAS_INSTALL=0
 
-	if [ "$HAS_INSTALL" = "1" ]; then
-		cp "$TMPDIR/data/INSTALL" "$ROOTDIR/$SCRIPTS/$dpkg"
+	if [ -f "$TMPDIR/data/CONTENTS" ]; then
+		HAS_CONTENTS=1
+	fi
+	if [ -f "$TMPDIR/data/BACKUP" ]; then
+		HAS_BACKUP=1
+	fi
+	if [ -x "$TMPDIR/data/INSTALL" ]; then
+		HAS_INSTALL=1
 	fi
 
 	if [ "$HAS_INSTALL" = "1" ]; then
@@ -575,19 +579,20 @@ install_package() {
 	fi
 
 	if [ "$HAS_BACKUP" = "1" ]; then
-		backup_save
+		backup save
 	fi
 
-	msgtwo "Installing package contents"
-	bsdtar -xf "$pkg" -C "$SAVEROOTDIR"  2>/dev/null || dietwo "Failed to install package contents"
+	msgtwo "Extracting package"
+	bsdtar -xf "$pkg" -C "$SAVEROOTDIR"  &>/dev/null || dietwo "Failed to install package contents"
 	rm -rf "$ROOTDIR/data"
 
-	if [ "$RUN_SUBSTRACT" = "1" ]; then
-		list_subtract "$TMPDIR/data/CONTENTS.old" "$TMPDIR/data/CONTENTS" | list_uninstall -
+	if [ "$UPDATE" = "1" ]; then
+		msgtwo "Removing old files"
+		list_subtract "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS" "$TMPDIR/data/CONTENTS" | list_uninstall -
 	fi
 
 	if [ "$HAS_BACKUP" = "1" ]; then
-		backup_restore
+		backup restore
 	fi
 
 	if [ "$HAS_INSTALL" = "1" ]; then
@@ -598,122 +603,27 @@ install_package() {
 		fi
 	fi
 
+	msgtwo "Doing package registration"
+	if [ "$UPDATE" = "1" ]; then
+		rm -rf "$ROOTDIR/$PACKAGES/$dpkg" "$ROOTDIR/$SCRIPTS/$dpkg"
+		mkdir -p "$ROOTDIR/$PACKAGES/$dpkg" "$ROOTDIR/$SCRIPTS"
+	else
+		mkdir -p "$ROOTDIR/$PACKAGES/$dpkg" "$ROOTDIR/$SCRIPTS"
+	fi
+
+	mv "$TMPDIR/data/METADATA" "$ROOTDIR/$PACKAGES/$dpkg/METADATA"
+	if [ "$HAS_CONTENTS" = "1" ]; then
+		mv "$TMPDIR/data/CONTENTS" "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS"
+	fi
+	if [ "$HAS_BACKUP" = "1" ]; then
+		mv "$TMPDIR/data/BACKUP" "$ROOTDIR/$PACKAGES/$dpkg/BACKUP"
+	fi
+	if [ "$HAS_INSTALL" = "1" ]; then
+		mv "$TMPDIR/data/INSTALL" "$ROOTDIR/$SCRIPTS/$dpkg"
+	fi
+
 	rm -rf "$TMPDIR"
 	msg "Package was successfully installed"
-}
-
-remove_package() {
-	local pkg dirlist nondir
-	pkg="$1"
-
-	if [ -z "$pkg" ]; then
-		die "Your package was not specified"
-	fi
-
-	if [ ! -d "$ROOTDIR/$PACKAGES/$dpkg" ]; then
-		die "Your package is not installed"
-	fi
-
-	msg "Remoing package: '${pkg}'"
-
-	run_scripts pre-remove
-
-	backup_save
-
-	dirlist=`grep '/$' "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"`
-	nondir=`grep -v '/$' "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"`
-	list_uninstall "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"
-
-	backup_restore
-
-	run_scripts post-remove
-
-	msgtwo "Removing package's information"
-	rm -rf "$ROOTDIR/$PACKAGES/$pkg" "$ROOTDIR/$SCRIPTS/$pkg"
-
-	msg "Package was successfully removed"
-}
-
-find_portdir() {
-	local pkg
-	pkg="$1"
-
-	for myrepos in ${REPOS[@]}; do
-		if [ -d "$myrepos/$pkg" ]; then
-			echo "$myrepos/$pkg"
-		fi
-	done
-}
-
-emerge_package() {
-	local pkg="$1"
-	local BUILD_SUCCEED="no"
-
-	if [ -z "$REPOS" ]; then
-		die "You haven't specified repositories"
-	fi
-
-	if [ -z "$pkg" ]; then
-		die "Your package was not specified"
-	fi
-
-	pushd "$(find_portdir $pkg)"
-		export TOPDIR="$PWD"
-		source_recipe
-
-		if [ "$NOCONFLICTS" != "yes" ]; then
-			if [ -n "$conflicts" ]; then
-				for myconflicts in ${conflicts[@]}; do
-					if [ -d "$ROOTDIR/$PACKAGES/$myconflicts" ]; then
-						die "Your package is conflicting with $myconflicts"
-					fi
-				done
-			fi
-		fi
-
-		if [ "$NODEPENDS" != "yes" ]; then
-			if [ -n "$depends" ]; then
-				for mydepends in $depends; do
-					if [ ! -d "$ROOTDIR/$PACKAGES/$mydepends" ]; then
-						(
-							set -e
-							emerge_package $mydepends
-						)
-
-						if [ $? = 0 ]; then
-							BUILD_SUCCEED="yes"
-						fi
-
-						if [ "$BUILD_SUCCEED" != "yes" ]; then
-								dietwo "Failed to emerge dependencies"
-						fi
-					fi
-				done
-			fi
-		fi
-
-		(
-			set -e
-			source_recipe
-			build_package
-
-			if [ "$NOPACKAGE" != "yes" ]; then
-					install_package
-			fi
-		)
-
-		if [ $? = 0 ]; then
-			BUILD_SUCCEED="yes"
-		fi
-
-		if [ "$BUILD_SUCCEED" != "yes" ]; then
-			dietwo "Failed to emerge package"
-		fi
-	popd
-}
-
-sysup() {
-	:
 }
 
 version() {
@@ -739,6 +649,7 @@ usage() {
 		"   -B		Compile package from recipe" \
 		"   -R		Remove package from system" \
 		"   -E		Compile and install package from ports repository (emerge mode)" \
+		"   -Q		Show information about packages/ports" \
 		"   -c <FILE>	Specify configuration file for kagami" \
 		"   -r <DIR>	Specify directory for installing packages" \
 		"   -v		Show version of kagami" \
@@ -763,6 +674,10 @@ usage() {
 		"   -x		Don't extract sources" \
 		"   -b		Don't build package" \
 		"   -p		Don't create package" \
+		"" \
+		"Options for 'query' mode:" \
+		"   -l		List installed packages" \
+		"   -P		Show information about certaing port" \
 		"" \
 		"BUG TRACKER: https://github.com/ataraxialinux/kagami/issues" \
 		""
@@ -793,8 +708,9 @@ NOSCRIPTS="no"
 NOHOOKS="no"
 USEBOOTSTRAP="no"
 FORCE="no"
+VERBOSE="no"
 
-while getopts :IBERCDxbpnXdfsHWawFc:r:vh options; do
+while getopts :IBERQCDxbpnXdfsHWawFVlPc:r:vh options; do
 	case $options in
 		I)
 			kagami_mode=install_package
@@ -805,21 +721,27 @@ while getopts :IBERCDxbpnXdfsHWawFc:r:vh options; do
 		E)
 			kagami_mode=emerge_package
 			;;
+		Q)
+			kagami_mode=query_package
+			;;
 		a)
 			if [ "$kagami_mode" = "emerge_package" ]; then
-				sysup
+				WORLD=0 sysup
 			fi
 			;;
 		w)
 			if [ "$kagami_mode" = "emerge_package" ]; then
-				NEEDED="no"
-				FORCE="yes"
-				if [ -d "$ROOTDIR/$PACKAGES/" ]; then
-					die "You don't have package database"
-				fi
-				for a in $("$ROOTDIR/$PACKAGES/" ); do
-					emerge_package $a
-				done
+				WORLD=1 sysup
+			fi
+			;;
+		l)
+			if [ "$kagami_mode" = "query_package" ]; then
+				query_mode=list
+			fi
+			;;
+		P)
+			if [ "$kagami_mode" = "query_package" ]; then
+				query_mode=port
 			fi
 			;;
 		R)
@@ -870,6 +792,9 @@ while getopts :IBERCDxbpnXdfsHWawFc:r:vh options; do
 		F)
 			FORCE="yes"
 			;;
+		V)
+			VERBOSE="yes"
+			;;
 		v)
 			version
 			;;
@@ -896,6 +821,7 @@ if [ "$kagami_mode" = "install_package" ] || [ "$kagami_mode" = "emerge_package"
 	if [ -n "$ROOTDIR" ]; then
 		ROOTDIR="$(realpath $ROOTDIR)"
 		ROOTDIR="${ROOTDIR%/}"
+		SAVEROOTDIR="${ROOTDIR}/"
 	fi
 
 	for mypackages in "$@"; do
