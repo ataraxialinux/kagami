@@ -621,7 +621,7 @@ install_package() {
 
 	if [ "$UPDATE" = "1" ]; then
 		msgtwo "Removing old files"
-		list_subtract "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS" "$TMPDIR/data/CONTENTS" | list_uninstall -
+		list_subtract "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS" "$TMPDIR/data/CONTENTS" | list_uninstall - || true
 	fi
 
 	if [ "$HAS_BACKUP" = "1" ]; then
