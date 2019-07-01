@@ -524,7 +524,7 @@ build_package() {
 			fi
 		fi
 	else
-		warn "This package was already built"
+		warntwo "This package was already built"
 	fi
 }
 
