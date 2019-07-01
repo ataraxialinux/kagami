@@ -3,6 +3,9 @@
 # Small and simple packages manager for Ataraxia Linux
 #
 
+umask 022
+unalias -a
+
 pushd () { command pushd "$@" > /dev/null; }
 popd () { command popd "$@" > /dev/null; }
 msg() { echo -e "\033[1;32m >>> \033[0m$@"; }
@@ -709,7 +712,7 @@ emerge_package() {
 		if [ "$NOCONFLICTS" != "yes" ]; then
 			if [ -n "$conflicts" ]; then
 				for myconflicts in ${conflicts[@]}; do
-					if [ -d "$ROOTDIR/$PACKAGES/$myconflicts" ]; then
+					if [ -f "$ROOTDIR/$PACKAGES/$myconflicts/METADATA" ]; then
 						die "Your package is conflicting with $myconflicts"
 					fi
 				done
@@ -719,7 +722,7 @@ emerge_package() {
 		if [ "$NODEPENDS" != "yes" ]; then
 			if [ -n "$depends" ]; then
 				for mydepends in $depends; do
-					if [ ! -d "$ROOTDIR/$PACKAGES/$mydepends" ]; then
+					if [ ! -f "$ROOTDIR/$PACKAGES/$mydepends/METADATA" ]; then
 						(
 							set -e
 							emerge_package $mydepends
@@ -735,7 +738,14 @@ emerge_package() {
 		source_recipe
 		build_package
 		if [ "$NOPACKAGE" != "yes" ]; then
+			if [ "$NEEDED" = "yes" ]; then
+				if [ -f "$ROOTDIR/$PACKAGES/$pkg/METADATA" ]; then
+					warntwo "This package has been already installed"
+					exit 0
+				fi
+			fi
 			(
+				set -e
 				install_package
 			)
 			if [ $? -eq 1 ]; then
