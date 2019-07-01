@@ -735,7 +735,12 @@ emerge_package() {
 		source_recipe
 		build_package
 		if [ "$NOPACKAGE" != "yes" ]; then
+			(
 				install_package
+			)
+			if [ $? -eq 1 ]; then
+				dietwo "Failed to emerge package"
+			fi
 		fi
 
 	popd
