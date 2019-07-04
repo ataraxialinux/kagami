@@ -531,8 +531,6 @@ build_package() {
 install_package() {
 	INST="yes"
 
-	local apkg bpkg cpkg dpkg
-
 	if [ -n "$TARGET" ]; then
 		pkg="$TARGET"
 	else
@@ -545,17 +543,15 @@ install_package() {
 
 	TMPDIR="$(mktemp -d)" || die "Couldn't create a temporary directory"
 
-	apkg="$(basename $pkg)"
-	bpkg="${apkg%*.kagami}"
-	cpkg="${bpkg%+*}"
-	dpkg="${cpkg%#*}"
+	bsdtar -C "$TMPDIR" -xf "$pkg" &>/dev/null || die "Can't extract package archive. Check if archive is broken"
+	source "$TMPDIR/data/METADATA"
 
 	UPDATE=0
-	if [ -f "$ROOTDIR/$PACKAGES/$dpkg/METADATA" ]; then
+	if [ -f "$ROOTDIR/$PACKAGES/$NAME/METADATA" ]; then
 		if [ "$NEEDED" != "yes" ]; then
 			UPDATE=1
 		else
-			warn "$dpkg: This package has been already installed"
+			warn "$NAME: This package has been already installed"
 			exit 0
 		fi
 	else
@@ -568,16 +564,13 @@ install_package() {
 		msg "Installing package: '${dpkg}'"
 	fi
 
-	msgtwo "Checking package"
-	bsdtar -C "$TMPDIR" -xf "$pkg" &>/dev/null || dietwo "Can't extract package archive. Check if archive is broken"
-
 	if [ ! -f "$TMPDIR/data/METADATA" ]; then
 		dietwo "Your package is not kagami package"
 	fi
 
 	if [ "$FORCE" != "yes" ]; then
 		msgtwo "Checking for file conflicts"
-		if [ ! -f "$ROOTDIR/$PACKAGES/$dpkg/METADATA" ]; then
+		if [ ! -f "$ROOTDIR/$PACKAGES/$NAME/METADATA" ]; then
 			for fileconflicts in $(bsdtar -tf "$pkg" | sed -e 's,\./,,g'); do
 				if [ -f "$ROOTDIR/$fileconflicts" ]; then
 					echo "$fileconflicts" >> /tmp/conflicts
@@ -621,7 +614,7 @@ install_package() {
 
 	if [ "$UPDATE" = "1" ]; then
 		msgtwo "Removing old files"
-		list_subtract "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS" "$TMPDIR/data/CONTENTS" | list_uninstall - || true
+		list_subtract "$ROOTDIR/$PACKAGES/$NAME/CONTENTS" "$TMPDIR/data/CONTENTS" | list_uninstall - || true
 	fi
 
 	if [ "$HAS_BACKUP" = "1" ]; then
@@ -638,21 +631,21 @@ install_package() {
 
 	msgtwo "Doing package registration"
 	if [ "$UPDATE" = "1" ]; then
-		rm -rf "$ROOTDIR/$PACKAGES/$dpkg" "$ROOTDIR/$SCRIPTS/$dpkg"
-		mkdir -p "$ROOTDIR/$PACKAGES/$dpkg" "$ROOTDIR/$SCRIPTS"
+		rm -rf "$ROOTDIR/$PACKAGES/$NAME" "$ROOTDIR/$SCRIPTS/$NAME"
+		mkdir -p "$ROOTDIR/$PACKAGES/$NAME" "$ROOTDIR/$SCRIPTS"
 	else
-		mkdir -p "$ROOTDIR/$PACKAGES/$dpkg" "$ROOTDIR/$SCRIPTS"
+		mkdir -p "$ROOTDIR/$PACKAGES/$NAME" "$ROOTDIR/$SCRIPTS"
 	fi
 
-	mv "$TMPDIR/data/METADATA" "$ROOTDIR/$PACKAGES/$dpkg/METADATA"
+	mv "$TMPDIR/data/METADATA" "$ROOTDIR/$PACKAGES/$NAME/METADATA"
 	if [ "$HAS_CONTENTS" = "1" ]; then
-		mv "$TMPDIR/data/CONTENTS" "$ROOTDIR/$PACKAGES/$dpkg/CONTENTS"
+		mv "$TMPDIR/data/CONTENTS" "$ROOTDIR/$PACKAGES/$NAME/CONTENTS"
 	fi
 	if [ "$HAS_BACKUP" = "1" ]; then
-		mv "$TMPDIR/data/BACKUP" "$ROOTDIR/$PACKAGES/$dpkg/BACKUP"
+		mv "$TMPDIR/data/BACKUP" "$ROOTDIR/$PACKAGES/$NAME/BACKUP"
 	fi
 	if [ "$HAS_INSTALL" = "1" ]; then
-		mv "$TMPDIR/data/INSTALL" "$ROOTDIR/$SCRIPTS/$dpkg"
+		mv "$TMPDIR/data/INSTALL" "$ROOTDIR/$SCRIPTS/$NAME"
 	fi
 
 	rm -rf "$TMPDIR"
