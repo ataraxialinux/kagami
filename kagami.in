@@ -14,36 +14,31 @@ warn() { echo -e "\033[1;33m ??? \033[0m$@"; }
 warntwo() { echo -e "\033[1;33m * \033[0m$@"; }
 
 die() {
-	echo -e "\033[1;31m >>> \033[0m$@"
+	case $1 in
+		-2)
+			MINIMSG=1
+			;;
+		-3)
+			MINIMSG=1
+			RMCONFLICTS=1
+			;;
+	esac
+
+	if [ "$MINIMSG" = "1" ]; then
+		echo -e "\033[1;31m * \033[0m$@"
+	else
+		echo -e "\033[1;31m >>> \033[0m$@"
+	fi
 
 	if [ "$NOCLEAN" != "yes" ]; then
 		rm -rf "$WORK"
 	fi
 
-	rm -rf "$TMPDIR"
-
-	exit 1
-}
-dietwo() {
-	echo -e "\033[1;31m * \033[0m$@"
-
-	if [ "$NOCLEAN" != "yes" ]; then
-		rm -rf "$WORK"
+	if [ "$RMCONFLICTS" = "1" ]; then
+		cat /tmp/conflicts
+		rm -rf /tmp/conflicts
 	fi
 
-	rm -rf "$TMPDIR"
-
-	exit 1
-}
-diethree() {
-	echo -e "\033[1;31m * \033[0m$@"
-
-	if [ "$NOCLEAN" != "yes" ]; then
-		rm -rf "$WORK"
-	fi
-
-	cat /tmp/conflicts
-	rm -rf /tmp/conflicts
 	rm -rf "$TMPDIR"
 
 	exit 1
@@ -77,11 +72,11 @@ source_recipe() {
 	source "$MYPORT"
 
 	if [ -z "$name" ]; then
-		dietwo "The name of package is not set"
+		die -2 "The name of package is not set"
 	elif [ -z "$version" ]; then
-		dietwo "The version of package is not set"
+		die -2 "The version of package is not set"
 	elif [ -z "$release" ]; then
-		dietwo "The release of package is not set"
+		die -2 "The release of package is not set"
 	fi
 
 	depends="$(grep "^# Depends on[[:blank:]]*:" "$MYPORT" | sed 's/^# Depends on[[:blank:]]*:[[:blank:]]*//' | tr ' ' '\n' | awk '!a[$0]++')"
@@ -110,7 +105,7 @@ download_file() {
 	local url="$1"
 
 	if [ ! "`type -p curl`" ]; then
-		dietwo "curl wasn't found"
+		die -2 "curl wasn't found"
 	fi
 
 	msgtwo "Downloading $url"
@@ -145,7 +140,7 @@ download_file() {
 	fi
 
 	if [ $error != 0 -o ! -f "$LOCAL_FILENAME_PARTIAL" ]; then
-		dietwo "Downloading '${1}' failed."
+		die -2 "Downloading '${1}' failed."
 	fi
 
 	mv -f "$LOCAL_FILENAME_PARTIAL" "$LOCAL_FILENAME"
@@ -159,7 +154,7 @@ download_source() {
 			LOCAL_FILENAME=`get_filename $FILE`
 			if [ ! -e $LOCAL_FILENAME ]; then
 				if [ "$LOCAL_FILENAME" = "$FILE" ]; then
-					dietwo "Source file '$LOCAL_FILENAME' not found (can not be downloaded, URL not specified)."
+					die -2 "Source file '$LOCAL_FILENAME' not found (can not be downloaded, URL not specified)."
 				else
 					download_file $FILE
 				fi
@@ -178,11 +173,11 @@ unpack_source() {
 			case $LOCAL_FILENAME in
 				*.tar|*.tar.gz|*.tar.Z|*.tgz|*.tar.bz2|*.tbz2|*.tar.xz|*.txz|*.tar.lzma|*.tar.lz|*.tlz|*.tar.lz4|*.tar.zst|*.tar.zstd|*.zip|*.rpm|*.7z)
 					msgtwo "Extacting $a to the sources directory"
-					bsdtar -p -o -C "$SRC" -xf $LOCAL_FILENAME || dietwo "Failed to extract $a to the sources directory"
+					bsdtar -p -o -C "$SRC" -xf $LOCAL_FILENAME || die -2 "Failed to extract $a to the sources directory"
 					;;
 				*)
 					msgtwo "Copying $a to the sources directory"
-					cp $LOCAL_FILENAME "$SRC" || dietwo "Failed to copy $a to the sources directory"
+					cp $LOCAL_FILENAME "$SRC" || die -2 "Failed to copy $a to the sources directory"
 					;;
 			esac
 		done
@@ -291,7 +286,7 @@ backup() {
 				msgtwo "Saving files"
 				for mybackup in $(cat "$backupfile"); do
 					if [ -f "$ROOTDIR/$mybackup" ]; then
-						mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.bak" || dietwo "Failed to save file: '${mybackup}'"
+						mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.bak" || die -2 "Failed to save file: '${mybackup}'"
 					fi
 				done
 				;;
@@ -300,9 +295,9 @@ backup() {
 				for mybackup in $(cat "$backupfile"); do
 					if [ -f "$ROOTDIR/$mybackup.bak" ]; then
 						if [ -f "$ROOTDIR/$mybackup" ]; then
-							mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.new" || dietwo "Failed to save new file: '${mybackup}'"
+							mv "$ROOTDIR/$mybackup" "$ROOTDIR/$mybackup.new" || die -2 "Failed to save new file: '${mybackup}'"
 						fi
-						mv "$ROOTDIR/$mybackup.bak" "$ROOTDIR/$mybackup" || dietwo "Failed to restore file: '${mybackup}'"
+						mv "$ROOTDIR/$mybackup.bak" "$ROOTDIR/$mybackup" || die -2 "Failed to restore file: '${mybackup}'"
 					fi
 				done
 				;;
@@ -379,7 +374,7 @@ compile_package() {
 				)
 			fi
 			if [ $? -eq 1 ]; then
-				dietwo "Failed to compile package"
+				die -2 "Failed to compile package"
 			fi
 		popd
 	fi
@@ -495,9 +490,9 @@ build_package() {
 
 		if [ "$USEBOOTSTRAP" = "yes" ]; then
 			if [ -z "$OPT_BOOTSTRAP" ]; then
-				dietwo "This package couldn't be built in the cross environment"
+				die -2 "This package couldn't be built in the cross environment"
 			elif [ "$OPT_BOOTSTRAP" = "0" ]; then
-				dietwo "This package couldn't be built in the cross environment"
+				die -2 "This package couldn't be built in the cross environment"
 			fi
 		fi
 
@@ -565,7 +560,7 @@ install_package() {
 	fi
 
 	if [ ! -f "$TMPDIR/data/METADATA" ]; then
-		dietwo "Your package is not kagami package"
+		die -2 "Your package is not kagami package"
 	fi
 
 	if [ "$FORCE" != "yes" ]; then
@@ -577,7 +572,7 @@ install_package() {
 				fi
 			done
 			if [ -f "/tmp/conflicts" ]; then
-				diethree "Following files couldn't be overwritten"
+				die -3 "Following files couldn't be overwritten"
 			fi
 		fi
 	fi
@@ -609,7 +604,7 @@ install_package() {
 	fi
 
 	msgtwo "Extracting package"
-	bsdtar -C "$SAVEROOTDIR" -xf "$pkg"  &>/dev/null || dietwo "Failed to install package contents"
+	bsdtar -C "$SAVEROOTDIR" -xf "$pkg"  &>/dev/null || die -2 "Failed to install package contents"
 	rm -rf "$ROOTDIR/data"
 
 	if [ "$UPDATE" = "1" ]; then
@@ -721,7 +716,7 @@ emerge_package() {
 							emerge_package $mydepends
 						)
 						if [ $? -eq 1 ]; then
-							dietwo "Failed to install dependencies"
+							die -2 "Failed to install dependencies"
 						fi
 					fi
 				done
@@ -742,7 +737,7 @@ emerge_package() {
 				install_package
 			)
 			if [ $? -eq 1 ]; then
-				dietwo "Failed to emerge package"
+				die -2 "Failed to emerge package"
 			fi
 		fi
 
