@@ -25,9 +25,9 @@ die() {
 	esac
 
 	if [ "$MINIMSG" = "1" ]; then
-		echo -e "\033[1;31m * \033[0m$@"
+		echo -e "\033[1;31m * \033[0m${@:2}"
 	else
-		echo -e "\033[1;31m >>> \033[0m$@"
+		echo -e "\033[1;31m >>> \033[0m${@:2}"
 	fi
 
 	if [ "$NOCLEAN" != "yes" ]; then
@@ -335,6 +335,8 @@ find_portdir() {
 }
 
 compile_package() {
+	local BUILD_SUCCESS="no"
+
 	if [ "$OPT_MAKEFLAGS" != "0" ]; then
 		export MAKEFLAGS="$MKOPTS"
 		export NINJA_OPTIONS="$MKOPTS"
@@ -373,7 +375,11 @@ compile_package() {
 					build &>/dev/null
 				)
 			fi
-			if [ $? -eq 1 ]; then
+			if [ $? -eq 0 ]; then
+				BUILD_SUCCESS="yes"
+			fi
+
+			if [ "$BUILD_SUCCESS" != "yes" ]; then
 				die -2 "Failed to compile package"
 			fi
 		popd
