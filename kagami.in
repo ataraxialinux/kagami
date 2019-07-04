@@ -554,9 +554,9 @@ install_package() {
 	fi
 
 	if [ "$UPDATE" = "1" ]; then
-		msg "Upgrading package: '${dpkg}'"
+		msg "Upgrading package: '${NAME}'"
 	else
-		msg "Installing package: '${dpkg}'"
+		msg "Installing package: '${NAME}'"
 	fi
 
 	if [ ! -f "$TMPDIR/data/METADATA" ]; then
