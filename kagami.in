@@ -27,7 +27,7 @@ die() {
 	if [ "$MINIMSG" = "1" ]; then
 		echo -e "\033[1;31m * \033[0m${@:2}"
 	else
-		echo -e "\033[1;31m >>> \033[0m${@:2}"
+		echo -e "\033[1;31m >>> \033[0m${@}"
 	fi
 
 	if [ "$NOCLEAN" != "yes" ]; then
@@ -164,9 +164,22 @@ download_source() {
 }
 
 unpack_source() {
-	local FILE LOCAL_FILENAME COMMAND a
+	local FILE LOCAL_FILENAME DONTUNPACK DONTUNPACKTWO a b
 
-	if [ -n "$source" ]; then
+	if [ -n "$noextract" ]; then
+		for FILE in ${source[@]}; do
+			b="$(basename $FILE)"
+			for DONTUNPACK in ${noextract[@]}; do
+				if [ "$b" = "$DONTUNPACK" ]; then
+					warntwo "Not extacting $b to the sources directory"
+					DONTUNPACKTWO=1
+					break
+				fi
+			done
+		done
+	fi
+
+	if [ -n "$source" ] && [ "$DONTUNPACKTWO" != 1 ]; then
 		for FILE in ${source[@]}; do
 			LOCAL_FILENAME=`get_filename $FILE`
 			a="$(basename $FILE)"
