@@ -289,7 +289,7 @@ backup() {
 	if [ "$INST" = "yes" ]; then
 		backupfile="$TMPDIR/data/BACKUP"
 	else
-		pkg="$2"
+		pkg="$1"
 		backupfile="$ROOTDIR/$PACKAGES/$pkg/BACKUP"
 	fi
 
@@ -702,6 +702,9 @@ remove_package() {
 }
 
 emerge_package() {
+	local EMERGE_SUCCESS="no"
+	local INSTALL_SUCCESS="no"
+
 	pkg="$1"
 
 	if [ -z "$REPOS" ]; then
@@ -734,7 +737,10 @@ emerge_package() {
 							set -e
 							emerge_package $mydepends
 						)
-						if [ $? -eq 1 ]; then
+						if [ $? -eq 0 ]; then
+							EMERGE_SUCCESS="yes"
+						fi
+						if [ "$EMERGE_SUCCESS" != "yes" ]; then
 							die -2 "Failed to install dependencies"
 						fi
 					fi
@@ -755,7 +761,10 @@ emerge_package() {
 				set -e
 				install_package
 			)
-			if [ $? -eq 1 ]; then
+			if [ $? -eq 0 ]; then
+				INSTALL_SUCCESS="yes"
+			fi
+			if [ "$INSTALL_SUCCESS" != "yes" ]; then
 				die -2 "Failed to emerge package"
 			fi
 		fi
