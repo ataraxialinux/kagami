@@ -10,6 +10,7 @@ pushd () { command pushd "$@" > /dev/null; }
 popd () { command popd "$@" > /dev/null; }
 msg() { echo -e "\033[1;32m >>> \033[0m$@"; }
 msgtwo() { echo -e "\033[1;35m * \033[0m$@"; }
+msgthree() { echo -e "\033[1;32m   * \033[0m$@"; }
 warn() { echo -e "\033[1;33m ??? \033[0m$@"; }
 warntwo() { echo -e "\033[1;33m * \033[0m$@"; }
 
@@ -285,7 +286,7 @@ list_uninstall() {
 	return 0
 }
 
-backup() {
+run_backup() {
 	local opt="$1"
 
 	if [ "$INST" = "yes" ]; then
@@ -539,8 +540,6 @@ build_package() {
 				rm -rf "$WORK"
 			fi
 		fi
-	else
-		warntwo "This package was already built"
 	fi
 }
 
@@ -563,15 +562,22 @@ install_package() {
 	source "$TMPDIR/data/METADATA"
 
 	UPDATE=0
+	ALREADYINSTALLED=0
 	if [ -f "$ROOTDIR/$PACKAGES/$NAME/METADATA" ]; then
 		if [ "$NEEDED" != "yes" ]; then
 			UPDATE=1
 		else
 			warn "$NAME: This package has been already installed"
-			exit 0
+			ALREADYINSTALLED=1
+			break
 		fi
 	else
 		UPDATE=0
+	fi
+
+	if [ "$ALREADYINSTALLED" = "1" ]; then
+		rm -rf "$TMPDIR"
+		exit 0
 	fi
 
 	if [ "$UPDATE" = "1" ]; then
@@ -621,7 +627,7 @@ install_package() {
 	fi
 
 	if [ "$HAS_BACKUP" = "1" ]; then
-		backup save
+		run_backup save
 	fi
 
 	msgtwo "Extracting package"
@@ -634,7 +640,7 @@ install_package() {
 	fi
 
 	if [ "$HAS_BACKUP" = "1" ]; then
-		backup restore
+		run_backup restore
 	fi
 
 	if [ "$HAS_INSTALL" = "1" ]; then
@@ -686,14 +692,14 @@ remove_package() {
 
 	run_scripts pre-remove $pkg
 
-	backup save $pkg
+	run_backup save $pkg
 
 	msgtwo "Removing files"
 	dirlist=`grep '/$' "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"`
 	nondir=`grep -v '/$' "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"`
 	list_uninstall "$ROOTDIR/$PACKAGES/$pkg/CONTENTS"
 
-	backup restore $pkg
+	run_backup restore $pkg
 
 	run_scripts post-remove $pkg
 
@@ -809,14 +815,16 @@ sysup() {
 		done
 	fi
 
-	if [ -z "$(cat /tmp/2update)" ]; then
+	if [ ! -f "/tmp/2update" ]; then
 		warn "Don't need to perform system update"
 		rm -rf /tmp/2update
 		exit 0
 	fi
 
 	msg "Following packages will be upgraded"
-	cat /tmp/2update
+	for out in $(cat /tmp/2update); do
+		msgthree "$out"
+	done
 
 	for pkgs in $(cat /tmp/2update); do
 		(

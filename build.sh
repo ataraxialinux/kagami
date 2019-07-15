@@ -1,6 +1,6 @@
 #!/bin/sh
 
-VERSION="$(git tag | tail -1)"
+VERSION="496"
 
 die() {
 	echo -e "ERROR: $@"
