@@ -59,6 +59,8 @@ source_config() {
 }
 
 source_recipe() {
+	unset name version release options backup source noextract
+
 	if [ -f "$TOPDIR/KagamiBuild" ]; then
 		MYPORT="$TOPDIR/KagamiBuild"
 	elif [ -f "$TOPDIR/KBUILD" ]; then
@@ -361,14 +363,14 @@ compile_package() {
 		if [ "$OPT_CCACHE" != "0" ]; then
 			if type ccache > /dev/null 2>&1; then
 				if [ -z "$CC" ]; then
-					CC="ccache gcc"
+					export CC="ccache gcc"
 				else
-					CC="ccache $CC"
+					export CC="ccache $CC"
 				fi
 				if [ -z "$CXX" ]; then
-					CXX="ccache g++"
+					export CXX="ccache g++"
 				else
-					CXX="ccache $CXX"
+					export CXX="ccache $CXX"
 				fi
 			fi
 		fi
@@ -772,6 +774,66 @@ emerge_package() {
 	popd
 }
 
+sysup() {
+	rm -rf /tmp/2update
+
+	local EMERGE_SUCCESS="no"
+
+	if [ "$WORLDUP" = "1" ]; then
+		if [ ! -d "$ROOTDIR/$PACKAGES" ]; then
+			die "Package database not found"
+		fi
+
+		for pkgs in $(find "$ROOTDIR/$PACKAGES/" -mindepth 1 -maxdepth 1 -type d -print0 | xargs -0 | sort | sed -e "s,$ROOTDIR/$PACKAGES/,,g"); do
+			echo "$pkgs" >> /tmp/2update
+		done
+	else
+		for pkgs in $(find "$ROOTDIR/$PACKAGES/" -mindepth 1 -maxdepth 1 -type d -print0 | xargs -0 | sort | sed -e "s,$ROOTDIR/$PACKAGES/,,g"); do
+			myfolder="$(find_portdir $pkgs)"
+
+			if [ -f "$myfolder/KagamiBuild" ]; then
+				kagamibuild="$myfolder/KagamiBuild"
+			elif [ -f "$myfolder/KBUILD" ]; then
+				kagamibuild="$myfolder/KBUILD"
+			elif [ -f "$myfolder/Pkgfile" ]; then
+				kagamibuild="$myfolder/Pkgfile"
+			fi
+
+			NEWVER="$(grep ^version $kagamibuild | sed -e 's,version=,,g')_$(grep ^release $kagamibuild | sed -e 's,release=,,g')"
+			OLDVER="$(grep ^VERSION "$ROOTDIR/$PACKAGES/$pkgs/METADATA" | sed -e 's,VERSION=,,g')_$(grep ^RELEASE "$ROOTDIR/$PACKAGES/$pkgs/METADATA" | sed -e 's,RELEASE=,,g')"
+
+			vercmp $OLDVER $NEWVER
+			if [ $? = 255 ]; then
+				echo "$pkgs" >> /tmp/2update
+			fi
+		done
+	fi
+
+	if [ -z "$(cat /tmp/2update)" ]; then
+		warn "Don't need to perform system update"
+		rm -rf /tmp/2update
+		exit 0
+	fi
+
+	msg "Following packages will be upgraded"
+	cat /tmp/2update
+
+	for pkgs in $(cat /tmp/2update); do
+		(
+			set -e
+			emerge_package $pkgs
+		)
+		if [ $? -eq 0 ]; then
+			EMERGE_SUCCESS="yes"
+		fi
+		if [ "$EMERGE_SUCCESS" != "yes" ]; then
+			die -2 "Failed to update package: $pkgs"
+		fi
+	done
+
+	rm -rf /tmp/2update
+}
+
 version() {
 	printf "%s\n" \
 		"kagami version $VERSION" \
@@ -857,7 +919,7 @@ USEBOOTSTRAP="no"
 FORCE="no"
 VERBOSE="no"
 
-while getopts :IBERQCDxbpnXdfsHWawFVlPc:r:vh options; do
+while getopts IBERQCDxbpnXdfsHWawFVlPc:r:vh options; do
 	case $options in
 		I)
 			kagami_mode=install_package
@@ -873,12 +935,14 @@ while getopts :IBERQCDxbpnXdfsHWawFVlPc:r:vh options; do
 			;;
 		a)
 			if [ "$kagami_mode" = "emerge_package" ]; then
-				WORLD=0 sysup
+				SYSUP=1
+				WORLDUP=0
 			fi
 			;;
 		w)
 			if [ "$kagami_mode" = "emerge_package" ]; then
-				WORLD=1 sysup
+				SYSUP=1
+				WORLDUP=1
 			fi
 			;;
 		l)
@@ -971,9 +1035,19 @@ if [ "$kagami_mode" = "install_package" ] || [ "$kagami_mode" = "emerge_package"
 		SAVEROOTDIR="${ROOTDIR}/"
 	fi
 
-	for mypackages in "$@"; do
-		$kagami_mode $mypackages
-	done
+	if [ "$kagami_mode" = "emerge_package" ]; then
+		if [ "$SYSUP" = "1" ]; then
+			sysup
+		else
+			for mypackages in "$@"; do
+				$kagami_mode $mypackages
+			done
+		fi
+	else
+		for mypackages in "$@"; do
+			$kagami_mode $mypackages
+		done
+	fi
 else
 	$kagami_mode
 fi
