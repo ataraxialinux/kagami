@@ -723,6 +723,19 @@ emerge_package() {
 		die "Your package was not specified"
 	fi
 
+	if [ -f "$ROOTDIR/$PACKAGES/$NAME/METADATA" ]; then
+		if [ "$NEEDED" = "yes" ]; then
+			warn "$NAME: This package has been already installed"
+			ALREADYINSTALLED=1
+			break
+		fi
+	fi
+
+	if [ "$ALREADYINSTALLED" = "1" ]; then
+		rm -rf "$TMPDIR"
+		exit 0
+	fi
+
 	pushd "$(find_portdir $pkg)"
 		export TOPDIR="$PWD"
 		source_recipe
