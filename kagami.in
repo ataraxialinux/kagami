@@ -220,37 +220,37 @@ run_strip() {
 }
 
 parse_options() {
-	for myopts in ${options[@]} ${OPTIONS[@]}; do
+	for myopts in ${OPTIONS[@]} ${options[@]}; do
 		case $myopts in
-			~emptydirs)
-				OPT_EMPTYDIRS=0
-				;;
 			emptydirs)
 				OPT_EMPTYDIRS=1
 				;;
-			~strip)
-				OPT_STRIP=0
+			~emptydirs)
+				OPT_EMPTYDIRS=0
 				;;
 			strip)
 				OPT_STRIP=1
 				;;
-			~makeflags)
-				OPT_MAKEFLAGS=0
+			~strip)
+				OPT_STRIP=0
 				;;
 			makeflags)
 				OPT_MAKEFLAGS=1
 				;;
-			~locales)
-				OPT_LOCALES=0
+			~makeflags)
+				OPT_MAKEFLAGS=0
 				;;
 			locales)
 				OPT_LOCALES=1
 				;;
-			~docs)
-				OPT_DOCS=0
+			~locales)
+				OPT_LOCALES=0
 				;;
 			docs)
 				OPT_DOCS=1
+				;;
+			~docs)
+				OPT_DOCS=0
 				;;
 			~bootstrap)
 				OPT_BOOTSTRAP=0
@@ -770,22 +770,16 @@ emerge_package() {
 		source_recipe
 		build_package
 		if [ "$NOPACKAGE" != "yes" ]; then
-			if [ "$NEEDED" = "yes" ]; then
-				if [ -f "$ROOTDIR/$PACKAGES/$pkg/METADATA" ]; then
-					warntwo "This package has been already installed"
-					exit 0
-				fi
+			if [ ! -f "$TARGET" ]; then
+				die -2 "Package file wasn't found"
 			fi
-			(
-				set -e
-				install_package
-			)
-			if [ $? = 0 ]; then
-				INSTALL_SUCCESS="yes"
-			fi
-			if [ "$INSTALL_SUCCESS" != "yes" ]; then
-				die -2 "Failed to emerge package"
-			fi
+			install_package
+		fi
+		if [ $? = 0 ]; then
+			INSTALL_SUCCESS="yes"
+		fi
+		if [ "$INSTALL_SUCCESS" != "yes" ]; then
+			die -2 "Failed to emerge package"
 		fi
 
 	popd
