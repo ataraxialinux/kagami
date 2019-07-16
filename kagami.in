@@ -133,7 +133,7 @@ download_file() {
 			$fullcmd $1
 			error=$?
 			if [ $error != 0 ] && [ "$RESUME" = "yes" ]; then
-				info "Partial download failed, restarting"
+				warn "Partial download failed, restarting"
 				rm -f "$LOCAL_FILENAME_PARTIAL"
 				RESUME="yes"
 			else
@@ -381,17 +381,11 @@ compile_package() {
 		msgtwo "Compiling package"
 		pushd "$SRC"
 			if [ "$VERBOSE" = "yes" ]; then
-				(
-					set -e
-					build
-				)
+				(set -e; build)
 			else
-				(
-					set -e
-					build &>/dev/null
-				)
+				(set -e; build &>/dev/null)
 			fi
-			if [ $? -eq 0 ]; then
+			if [ $? = 0 ]; then
 				BUILD_SUCCESS="yes"
 			fi
 
@@ -761,11 +755,8 @@ emerge_package() {
 			if [ -n "$depends" ]; then
 				for mydepends in $depends; do
 					if [ ! -f "$ROOTDIR/$PACKAGES/$mydepends/METADATA" ]; then
-						(
-							set -e
-							emerge_package $mydepends
-						)
-						if [ $? -eq 0 ]; then
+						(set -e; emerge_package $mydepends)
+						if [ $? = 0 ]; then
 							EMERGE_SUCCESS="yes"
 						fi
 						if [ "$EMERGE_SUCCESS" != "yes" ]; then
@@ -789,7 +780,7 @@ emerge_package() {
 				set -e
 				install_package
 			)
-			if [ $? -eq 0 ]; then
+			if [ $? = 0 ]; then
 				INSTALL_SUCCESS="yes"
 			fi
 			if [ "$INSTALL_SUCCESS" != "yes" ]; then
@@ -848,11 +839,8 @@ sysup() {
 	done
 
 	for pkgs in $(cat /tmp/2update); do
-		(
-			set -e
-			emerge_package $pkgs
-		)
-		if [ $? -eq 0 ]; then
+		(set -e; emerge_package $pkgs)
+		if [ $? = 0 ]; then
 			EMERGE_SUCCESS="yes"
 		fi
 		if [ "$EMERGE_SUCCESS" != "yes" ]; then
