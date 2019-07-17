@@ -563,7 +563,6 @@ install_package() {
 		else
 			warn "$NAME: This package has been already installed"
 			ALREADYINSTALLED=1
-			break
 		fi
 	else
 		UPDATE=0
@@ -728,7 +727,6 @@ emerge_package() {
 		if [ "$NEEDED" = "yes" ]; then
 			warn "$NAME: This package has been already installed"
 			ALREADYINSTALLED=1
-			break
 		fi
 	fi
 
