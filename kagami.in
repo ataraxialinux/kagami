@@ -397,7 +397,7 @@ compile_package() {
 
 	pushd "$PKG"
 		msgtwo "Removing junk from package"
-		rm -rf {,usr/}{,local/}{,share/}{info} usr{,/local}{,/share},opt/*}/{info}
+		rm -rf {,usr/}{,local/}{,share/}info usr{,/local}{,/share},opt/*}/info
 		rm -rf {,usr/}{,local/}lib/charset.alias
 
 		find . -name "*.la" -print0 | xargs -0 rm -rf
@@ -405,18 +405,18 @@ compile_package() {
 		find . -name ".packlist" -print0 | xargs -0 rm -rf
 
 		if [ "$OPT_EMPTYDIRS" = "0" ]; then
-			msgtwo "Removing empty directories"
-			find . -type d -empty -print0 | xargs -0 rm -rf
+				msgtwo "Removing empty directories"
+		find . -type d -empty -print0 | xargs -0 rm -rf
 		fi
 
 		if [ "$OPT_LOCALES" = "0" ]; then
 			msgtwo "Removing locales"
-			rm -rf {,usr/}{,local/}{,share/}{locale}
+			rm -rf {,usr/}{,local/}{,share/}locale
 		fi
 
 		if [ "$OPT_DOCS" = "0" ]; then
 			msgtwo "Removing documentation"
-			rm -rf {,usr/}{,local/}{,share/}{doc} usr/{,local/}{,share/}{doc,gtk-doc} opt/*/{doc,gtk-doc}
+			rm -rf {,usr/}{,local/}{,share/}doc usr/{,local/}{,share/}{doc,gtk-doc} opt/*/{doc,gtk-doc}
 		fi
 
 		msgtwo "Compressing manual pages"
