@@ -771,13 +771,16 @@ emerge_package() {
 			if [ ! -f "$TARGET" ]; then
 				die -2 "Package file wasn't found"
 			fi
-			install_package
-		fi
-		if [ $? = 0 ]; then
-			INSTALL_SUCCESS="yes"
-		fi
-		if [ "$INSTALL_SUCCESS" != "yes" ]; then
-			die -2 "Failed to emerge package"
+			(
+				set -e
+				install_package
+			)
+			if [ $? = 0 ]; then
+				INSTALL_SUCCESS="yes"
+			fi
+			if [ "$INSTALL_SUCCESS" != "yes" ]; then
+				die -2 "Failed to emerge package"
+			fi
 		fi
 
 	popd

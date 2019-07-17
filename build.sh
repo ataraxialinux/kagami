@@ -1,6 +1,6 @@
 #!/bin/sh
 
-VERSION="496"
+VERSION="498"
 
 die() {
 	echo -e "ERROR: $@"
