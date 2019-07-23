@@ -172,6 +172,11 @@ source_recipe() {
 	summary="$(grep "^# Description[[:blank:]]*:" "$MYPORT" | sed 's/^# Description[[:blank:]]*:[[:blank:]]*//' | tr ' ' ' ' | awk '!a[$0]++')"
 	url="$(grep "^# URL[[:blank:]]*:" "$MYPORT" | sed 's/^# URL[[:blank:]]*:[[:blank:]]*//' | tr ' ' ' ' | awk '!a[$0]++')"
 	group="$(grep "^# Group[[:blank:]]*:" "$MYPORT" | sed 's/^# Group[[:blank:]]*:[[:blank:]]*//' | tr ' ' ' ' | awk '!a[$0]++')"
+	license="$(grep "^# License[[:blank:]]*:" "$MYPORT" | sed 's/^# License[[:blank:]]*:[[:blank:]]*//' | tr ' ' ' ' | awk '!a[$0]++')"
+
+	if [ -z "$license" ]; then
+		license="FIXME"
+	fi
 
 	if [ -z "$name" ]; then
 		die -2 "The name of package is not set"
@@ -381,7 +386,7 @@ create_package() {
 		echo "Version: $version" >> "$SPECFILE"
 		echo "Release: $release%{distro}" >> "$SPECFILE"
 		echo "Summary: $summary" >> "$SPECFILE"
-		echo "License: FIXME" >> "$SPECFILE"
+		echo "License: $license" >> "$SPECFILE"
 		if [ -n "$url" ]; then
 			echo "URL: $url" >> "$SPECFILE"
 		fi
